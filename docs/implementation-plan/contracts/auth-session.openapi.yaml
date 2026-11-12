@@ -1,0 +1,404 @@
+openapi: 3.0.3
+info:
+  title: DASHIFY Authentication and Session Contract
+  version: 1.0.0-draft.1
+  description: >
+    Approved planning contract for browser authentication, school/workspace
+    selection, and current-session refresh/logout. Password-reset operations
+    are proposed only; their delivery provider and abuse-control details remain
+    unapproved. This contract does not describe the currently implemented API.
+servers:
+  - url: http://localhost:3001/api/v1
+    description: Proposed local development URL; reconcile runtime config before implementation
+tags:
+  - name: Authentication
+  - name: Password reset
+paths:
+  /auth/login:
+    post:
+      tags: [Authentication]
+      operationId: login
+      summary: Authenticate a browser session
+      description: >
+        Sets HttpOnly access and refresh cookies and a CSRF cookie. Never
+        returns credential values in JSON. A platform-only account receives a
+        platform-scoped session and no school memberships in active context.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated; cookies set
+          headers:
+            Set-Cookie:
+              description: >
+                Sets dashify_access, dashify_refresh, and dashify_csrf. Auth
+                cookies are HttpOnly, scoped to /api/v1, Secure in deployed
+                environments, and SameSite=Lax for same-site deployment.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/refresh:
+    post:
+      tags: [Authentication]
+      operationId: refreshSession
+      summary: Rotate the current browser session credentials
+      description: >
+        Rotates the current refresh credential and auth cookies. Rejects
+        expired, revoked, reused, or no-longer-authorized sessions. Preserves
+        the selected school/workspace only while its membership is active.
+      security:
+        - refreshCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: Session refreshed; cookies rotated
+          headers:
+            Set-Cookie:
+              description: Rotated access, refresh, and CSRF cookies
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      operationId: logoutCurrentSession
+      summary: Revoke the current browser session
+      description: Idempotently revokes only the current session and clears its cookies.
+      security:
+        - refreshCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204":
+          description: Current session revoked and cookies cleared
+          headers:
+            Set-Cookie:
+              description: Expired auth and CSRF cookies
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /auth/me:
+    get:
+      tags: [Authentication]
+      operationId: getCurrentSession
+      summary: Get the authenticated user and active context
+      security:
+        - accessCookie: []
+      responses:
+        "200":
+          description: Current browser session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /auth/schools:
+    get:
+      tags: [Authentication]
+      operationId: listMySchools
+      summary: List active school memberships for the authenticated user
+      description: This is a membership list, not a platform-wide school directory.
+      security:
+        - accessCookie: []
+      responses:
+        "200":
+          description: Membership choices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Membership"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /auth/active-school:
+    post:
+      tags: [Authentication]
+      operationId: selectActiveSchoolAndWorkspace
+      summary: Select an active school and workspace role
+      description: >
+        Validates the active membership and workspace role, derives the
+        permission union server-side, sets scoped cookies, and never accepts
+        caller-supplied permissions. A platform-only session cannot call this
+        operation.
+      security:
+        - accessCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SelectSchoolRequest"
+      responses:
+        "200":
+          description: School/workspace context selected; scoped cookies set
+          headers:
+            Set-Cookie:
+              description: Access, refresh, and CSRF cookies for selected context
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /auth/password-reset/request:
+    post:
+      tags: [Password reset]
+      operationId: requestPasswordReset
+      summary: Request a password-reset email
+      x-approval-status: proposed
+      description: >
+        Returns the same response for known and unknown accounts. Approved
+        request limit is 3 per email address and 10 per IP per 15 minutes.
+        Delivery provider and final contract approval remain pending.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetRequest"
+      responses:
+        "202":
+          description: Request accepted without account-existence disclosure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/password-reset/confirm:
+    post:
+      tags: [Password reset]
+      operationId: confirmPasswordReset
+      summary: Set a new password using a reset token
+      x-approval-status: proposed
+      description: >
+        Accepts a one-time token expiring after 60 minutes. Enforce a minimum
+        password length of 12 characters, allow passphrases without mandatory
+        character classes, and revoke all sessions after success. Audit
+        requests, success, and security-relevant failures without logging
+        tokens/passwords. Confirmation-attempt throttling and final contract
+        approval remain pending.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetConfirm"
+      responses:
+        "204":
+          description: Password updated
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+components:
+  securitySchemes:
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: dashify_access
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: dashify_refresh
+  parameters:
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Must match the configured frontend origin allow-list.
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Must match the dashify_csrf cookie for state-changing requests.
+  schemas:
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    LoginResponse:
+      type: object
+      required: [user, scope, memberships, activeSchool]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        scope:
+          type: string
+          enum: [platform, school-selection, school]
+        memberships:
+          type: array
+          items:
+            $ref: "#/components/schemas/Membership"
+        activeSchool:
+          allOf:
+            - $ref: "#/components/schemas/ActiveSchool"
+          nullable: true
+    SessionResponse:
+      allOf:
+        - $ref: "#/components/schemas/LoginResponse"
+        - type: object
+          required: [workspaceRoles, activeWorkspaceRole, permissionKeys]
+          properties:
+            workspaceRoles:
+              type: array
+              items:
+                type: string
+              description: Workspace roles for the active membership; empty in platform-only scope.
+            activeWorkspaceRole:
+              type: string
+              nullable: true
+            permissionKeys:
+              type: array
+              items:
+                type: string
+              description: Server-derived effective permission union; empty for school selection before selection.
+    User:
+      type: object
+      required: [id, email, firstName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+          nullable: true
+    Membership:
+      type: object
+      required: [membershipId, school, workspaceRoles]
+      properties:
+        membershipId:
+          type: string
+          format: uuid
+        school:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        workspaceRoles:
+          type: array
+          items:
+            type: string
+    ActiveSchool:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    SelectSchoolRequest:
+      type: object
+      additionalProperties: false
+      required: [schoolId, workspaceRole]
+      properties:
+        schoolId:
+          type: string
+          format: uuid
+        workspaceRole:
+          type: string
+    PasswordResetRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    PasswordResetConfirm:
+      type: object
+      additionalProperties: false
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+        newPassword:
+          type: string
+          format: password
+          minLength: 12
+    GenericAccepted:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+  responses:
+    BadRequest:
+      description: Request validation failed
+    Unauthorized:
+      description: Missing, expired, invalid, revoked, or reused session credential
+    Forbidden:
+      description: Origin/CSRF check failed or caller lacks the required scope
+    TooManyRequests:
+      description: Rate limit exceeded

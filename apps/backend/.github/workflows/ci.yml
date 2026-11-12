@@ -1,0 +1,32 @@
+name: backend-ci
+on:
+  push:
+  pull_request:
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: dashify
+          POSTGRES_USER: dashify_migrator
+          POSTGRES_PASSWORD: local_migrate_password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dashify_migrator -d dashify"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm install
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm test -- --runInBand
+      - run: npm run build
+        env:
+          DATABASE_URL: postgresql://dashify_migrator:local_migrate_password@localhost:5432/dashify?schema=public
+          DIRECT_URL: postgresql://dashify_migrator:local_migrate_password@localhost:5432/dashify?schema=public
+          AUTH_ACCESS_TOKEN_SECRET: ci-access-secret-at-least-32-characters
+          AUTH_REFRESH_TOKEN_SECRET: ci-refresh-secret-at-least-32-characters
