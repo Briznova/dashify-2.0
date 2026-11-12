@@ -1,0 +1,68 @@
+openapi: 3.0.3
+info:
+  title: DASHIFY Platform School Directory Contract
+  version: 1.0.0
+  description: >
+    Implemented read-only school directory for a dedicated platform-only
+    session. This contract does not grant school lifecycle, impersonation, or
+    school-record access.
+servers:
+  - url: http://localhost:3001/api/v1
+    description: Local development API
+tags:
+  - name: Platform
+paths:
+  /platform/schools:
+    get:
+      tags: [Platform]
+      operationId: listPlatformSchools
+      summary: List school metadata in a platform-only session
+      description: >
+        Requires an active platform session and platform.schools.read. No
+        school-scoped token, school switch, filters, or pagination are accepted.
+        Results are ordered by school name and contain only directory metadata.
+        Each successful read is audited.
+      security:
+        - accessCookie: []
+      responses:
+        "200":
+          description: Read-only directory metadata
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlatformSchool"
+        "401":
+          description: Missing, expired, revoked, or invalid platform session
+        "403":
+          description: School-scoped session or missing platform permission
+components:
+  securitySchemes:
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: dashify_access
+  schemas:
+    PlatformSchool:
+      type: object
+      additionalProperties: false
+      required: [id, name, code, isActive, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time

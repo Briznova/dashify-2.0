@@ -5,7 +5,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import type { Prisma, RefreshToken } from "@prisma/client";
+import { AuthScope, type Prisma, type RefreshToken } from "@prisma/client";
 import { createHash, randomBytes, randomUUID } from "crypto";
 import * as argon2 from "argon2";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
@@ -14,6 +14,7 @@ import type { AuthCredentials } from "./auth-cookies";
 
 type SessionContext = {
   sessionId: string;
+  scope: "platform" | "school-selection" | "school";
   activeSchoolId: string | null;
   membershipId: string | null;
   activeWorkspaceRole: string | null;
@@ -58,6 +59,45 @@ export class AuthService {
     }
 
     await this.logout(existingRefreshToken);
+    const platformGrant = await this.prisma.platformAdminGrant.findFirst({
+      where: { userId: user.id, revokedAt: null },
+      select: { id: true },
+    });
+    if (platformGrant) {
+      const activeMembershipCount = await this.prisma.schoolMembership.count({
+        where: { userId: user.id, status: "ACTIVE" },
+      });
+      if (activeMembershipCount > 0) {
+        throw new ForbiddenException(
+          "Platform administrator accounts cannot have active school memberships",
+        );
+      }
+      const sessionId = randomUUID();
+      const refreshToken = this.newRefreshToken();
+      const context: SessionContext = {
+        sessionId,
+        scope: "platform",
+        activeSchoolId: null,
+        membershipId: null,
+        activeWorkspaceRole: null,
+        permissionKeys: ["platform.schools.read"],
+      };
+      await this.prisma.refreshToken.create({
+        data: {
+          userId: user.id,
+          tokenHash: this.hashToken(refreshToken),
+          expiresAt: this.refreshExpiry(),
+          sessionId,
+          scope: AuthScope.PLATFORM,
+        },
+      });
+      const accessToken = await this.createAccessToken(user, context);
+      return {
+        body: this.sessionResponse(user, [], context, null),
+        credentials: this.credentials(accessToken, refreshToken),
+      };
+    }
+
     const memberships = await this.activeMemberships(user.id);
     if (memberships.length === 0) {
       throw new ForbiddenException("An active school membership is required");
@@ -71,11 +111,13 @@ export class AuthService {
         tokenHash: this.hashToken(refreshToken),
         expiresAt: this.refreshExpiry(),
         sessionId,
+        scope: AuthScope.SCHOOL_SELECTION,
       },
     });
 
     const context: SessionContext = {
       sessionId,
+      scope: "school-selection",
       activeSchoolId: null,
       membershipId: null,
       activeWorkspaceRole: null,
@@ -123,9 +165,39 @@ export class AuthService {
       throw new UnauthorizedException();
     }
 
+    if (existing.scope !== AuthScope.PLATFORM) {
+      const platformGrant = await this.prisma.platformAdminGrant.findFirst({
+        where: { userId: user.id, revokedAt: null },
+        select: { id: true },
+      });
+      if (platformGrant) {
+        await this.revokeSession(existing.sessionId);
+        throw new UnauthorizedException();
+      }
+    }
+
     let activeMembership: MembershipRecord | null = null;
     let permissionKeys: string[] = [];
-    if (existing.activeSchoolId && existing.membershipId) {
+    if (existing.scope === AuthScope.PLATFORM) {
+      const platformGrant = await this.prisma.platformAdminGrant.findFirst({
+        where: { userId: user.id, revokedAt: null },
+        select: { id: true },
+      });
+      if (
+        !platformGrant ||
+        existing.activeSchoolId ||
+        existing.membershipId ||
+        existing.activeWorkspaceRole
+      ) {
+        await this.revokeSession(existing.sessionId);
+        throw new UnauthorizedException();
+      }
+      permissionKeys = ["platform.schools.read"];
+    } else if (existing.scope === AuthScope.SCHOOL) {
+      if (!existing.activeSchoolId || !existing.membershipId) {
+        await this.revokeSession(existing.sessionId);
+        throw new UnauthorizedException();
+      }
       activeMembership = await this.prisma.schoolMembership.findFirst({
         where: {
           id: existing.membershipId,
@@ -149,10 +221,19 @@ export class AuthService {
         throw new UnauthorizedException();
       }
       permissionKeys = this.permissionsFor(activeMembership);
+    } else if (
+      existing.scope === AuthScope.SCHOOL_SELECTION &&
+      (existing.activeSchoolId ||
+        existing.membershipId ||
+        existing.activeWorkspaceRole)
+    ) {
+      await this.revokeSession(existing.sessionId);
+      throw new UnauthorizedException();
     }
 
     const context: SessionContext = {
       sessionId: existing.sessionId,
+      scope: this.sessionScope(existing.scope),
       activeSchoolId: activeMembership?.schoolId ?? null,
       membershipId: activeMembership?.id ?? null,
       activeWorkspaceRole: activeMembership
@@ -164,7 +245,8 @@ export class AuthService {
     const accessToken = await this.createAccessToken(user, context);
     await this.rotateRefreshToken(existing, nextRefreshToken, context);
 
-    const memberships = await this.activeMemberships(user.id);
+    const memberships =
+      context.scope === "platform" ? [] : await this.activeMemberships(user.id);
     return {
       body: this.sessionResponse(user, memberships, context, activeMembership),
       credentials: this.credentials(accessToken, nextRefreshToken),
@@ -207,6 +289,16 @@ export class AuthService {
       },
     });
     if (!existing) throw new UnauthorizedException();
+    if (existing.scope === AuthScope.PLATFORM) {
+      throw new ForbiddenException("Platform sessions cannot select a school");
+    }
+    const platformGrant = await this.prisma.platformAdminGrant.findFirst({
+      where: { userId, revokedAt: null },
+      select: { id: true },
+    });
+    if (platformGrant) {
+      throw new ForbiddenException("Platform sessions cannot select a school");
+    }
 
     const membership = await this.prisma.schoolMembership.findFirst({
       where: {
@@ -233,6 +325,7 @@ export class AuthService {
 
     const context: SessionContext = {
       sessionId,
+      scope: "school",
       activeSchoolId: membership.schoolId,
       membershipId: membership.id,
       activeWorkspaceRole: role.role.key.toLowerCase(),
@@ -249,7 +342,14 @@ export class AuthService {
     };
   }
 
-  async listSchools(userId: string) {
+  async listSchools(userId: string, scope: string | undefined) {
+    const platformGrant = await this.prisma.platformAdminGrant.findFirst({
+      where: { userId, revokedAt: null },
+      select: { id: true },
+    });
+    if (scope === "platform" || platformGrant) {
+      throw new ForbiddenException("Platform sessions do not use school selection");
+    }
     const memberships = await this.activeMemberships(userId);
     return memberships.map((membership) => this.membershipSummary(membership));
   }
@@ -263,10 +363,38 @@ export class AuthService {
     });
     if (!user?.isActive) throw new UnauthorizedException();
 
+    if (context.scope === "platform") {
+      const platformGrant = await this.prisma.platformAdminGrant.findFirst({
+        where: { userId, revokedAt: null },
+        select: { id: true },
+      });
+      if (
+        !platformGrant ||
+        context.activeSchoolId ||
+        context.membershipId ||
+        context.activeWorkspaceRole
+      ) {
+        throw new UnauthorizedException();
+      }
+      return this.sessionResponse(
+        user,
+        [],
+        {
+          ...context,
+          scope: "platform",
+          permissionKeys: ["platform.schools.read"],
+        },
+        null,
+      );
+    }
+
     const memberships = await this.activeMemberships(userId);
     let activeMembership: MembershipRecord | null = null;
     let permissionKeys: string[] = [];
-    if (context.activeSchoolId && context.membershipId) {
+    if (context.scope === "school") {
+      if (!context.activeSchoolId || !context.membershipId) {
+        throw new UnauthorizedException();
+      }
       activeMembership = await this.prisma.schoolMembership.findFirst({
         where: {
           id: context.membershipId,
@@ -289,6 +417,13 @@ export class AuthService {
         throw new UnauthorizedException();
       }
       permissionKeys = this.permissionsFor(activeMembership);
+    } else if (
+      context.scope !== "school-selection" ||
+      context.activeSchoolId ||
+      context.membershipId ||
+      context.activeWorkspaceRole
+    ) {
+      throw new UnauthorizedException();
     }
 
     return this.sessionResponse(
@@ -354,9 +489,7 @@ export class AuthService {
   ) {
     return {
       user: this.userSummary(user),
-      scope: activeMembership
-        ? ("school" as const)
-        : ("school-selection" as const),
+      scope: context.scope,
       memberships: memberships.map((membership) =>
         this.membershipSummary(membership),
       ),
@@ -402,7 +535,7 @@ export class AuthService {
         sub: user.id,
         email: user.email,
         sid: context.sessionId,
-        scope: context.activeSchoolId ? "school" : "school-selection",
+        scope: context.scope,
         schoolId: context.activeSchoolId ?? undefined,
         membershipId: context.membershipId ?? undefined,
         workspaceRole: context.activeWorkspaceRole ?? undefined,
@@ -464,6 +597,7 @@ export class AuthService {
           tokenHash: this.hashToken(rawToken),
           expiresAt: this.refreshExpiry(),
           sessionId: context.sessionId,
+          scope: this.databaseScope(context.scope),
           activeSchoolId: context.activeSchoolId,
           membershipId: context.membershipId,
           activeWorkspaceRole: context.activeWorkspaceRole,
@@ -487,5 +621,27 @@ export class AuthService {
       where: { sessionId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+  }
+
+  private sessionScope(scope: AuthScope): SessionContext["scope"] {
+    switch (scope) {
+      case AuthScope.PLATFORM:
+        return "platform";
+      case AuthScope.SCHOOL:
+        return "school";
+      case AuthScope.SCHOOL_SELECTION:
+        return "school-selection";
+    }
+  }
+
+  private databaseScope(scope: SessionContext["scope"]): AuthScope {
+    switch (scope) {
+      case "platform":
+        return AuthScope.PLATFORM;
+      case "school":
+        return AuthScope.SCHOOL;
+      case "school-selection":
+        return AuthScope.SCHOOL_SELECTION;
+    }
   }
 }

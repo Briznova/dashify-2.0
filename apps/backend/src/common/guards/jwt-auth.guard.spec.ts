@@ -1,6 +1,7 @@
 import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
+import { AuthScope } from "@prisma/client";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 
@@ -16,6 +17,7 @@ describe("JwtAuthGuard browser sessions", () => {
     sub: "user-1",
     email: "user@example.test",
     sid: "session-1",
+    scope: "school",
     schoolId: "school-1",
     membershipId: "membership-1",
     workspaceRole: "school_admin",
@@ -33,8 +35,13 @@ describe("JwtAuthGuard browser sessions", () => {
       refreshToken: {
         findFirst: jest
           .fn()
-          .mockResolvedValue(activeSession ? { id: "refresh-1" } : null),
+          .mockResolvedValue(
+            activeSession
+              ? { id: "refresh-1", scope: AuthScope.SCHOOL }
+              : null,
+          ),
       },
+      platformAdminGrant: { findFirst: jest.fn() },
       schoolMembership: {
         findFirst: jest.fn().mockResolvedValue({
           id: "membership-1",
@@ -69,6 +76,7 @@ describe("JwtAuthGuard browser sessions", () => {
     expect(prisma.refreshToken.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          userId: payload.sub,
           sessionId: "session-1",
           revokedAt: null,
           expiresAt: { gt: expect.any(Date) },
@@ -89,6 +97,7 @@ describe("JwtAuthGuard browser sessions", () => {
       id: payload.sub,
       email: payload.email,
       sessionId: payload.sid,
+      scope: "school",
       activeSchoolId: payload.schoolId,
       membershipId: payload.membershipId,
       activeWorkspaceRole: payload.workspaceRole,
@@ -102,5 +111,64 @@ describe("JwtAuthGuard browser sessions", () => {
     await expect(guard.canActivate(executionContext)).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
+  });
+
+  it("grants only the platform directory permission to an active platform session", async () => {
+    const platformPayload = {
+      sub: "platform-user-1",
+      email: "platform@example.test",
+      sid: "platform-session-1",
+      scope: "platform",
+      permissions: ["students.read", "platform.schools.manage"],
+    };
+    const jwt = { verifyAsync: jest.fn().mockResolvedValue(platformPayload) };
+    const config = {
+      getOrThrow: jest.fn().mockReturnValue("x".repeat(32)),
+    };
+    const prisma = {
+      refreshToken: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "refresh-1", scope: AuthScope.PLATFORM }),
+      },
+      platformAdminGrant: {
+        findFirst: jest.fn().mockResolvedValue({ id: "grant-1" }),
+      },
+      schoolMembership: { findFirst: jest.fn() },
+    };
+    const guard = new JwtAuthGuard(
+      jwt as unknown as JwtService,
+      config as unknown as ConfigService,
+      prisma as unknown as PrismaService,
+    );
+
+    await expect(guard.canActivate(executionContext)).resolves.toBe(true);
+    expect(prisma.platformAdminGrant.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: platformPayload.sub,
+          revokedAt: null,
+          user: { is: { isActive: true } },
+        },
+      }),
+    );
+    expect(request).toHaveProperty("user", {
+      id: platformPayload.sub,
+      email: platformPayload.email,
+      sessionId: platformPayload.sid,
+      scope: "platform",
+      permissions: ["platform.schools.read"],
+    });
+    expect(prisma.schoolMembership.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rejects a school-scoped token when its account has an active platform grant", async () => {
+    const { guard, prisma } = createGuard(true);
+    prisma.platformAdminGrant.findFirst.mockResolvedValue({ id: "grant-1" });
+
+    await expect(guard.canActivate(executionContext)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(prisma.schoolMembership.findFirst).not.toHaveBeenCalled();
   });
 });

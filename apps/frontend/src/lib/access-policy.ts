@@ -6,6 +6,7 @@ export type UiCapability =
   | "schools"
   | "students"
   | "staff"
+  | "announcements"
   | "classes"
   | "attendance"
   | "fees"
@@ -44,9 +45,10 @@ const apiAccessByCapability: Record<
   { permissions: readonly string[]; adapterReady: boolean } | null
 > = {
   overview: { permissions: [], adapterReady: true },
-  schools: null,
+  schools: { permissions: ["platform.schools.read"], adapterReady: true },
   students: { permissions: ["students.read"], adapterReady: true },
   staff: { permissions: ["staff.read"], adapterReady: true },
+  announcements: { permissions: ["announcements.read"], adapterReady: true },
   classes: {
     permissions: ["academic_structure.read"],
     adapterReady: true,
@@ -59,7 +61,10 @@ const apiAccessByCapability: Record<
   academics: { permissions: ["academic_structure.read"], adapterReady: true },
   analytics: null,
   reports: { permissions: ["reports.read"], adapterReady: true },
-  "teaching-day": null,
+  "teaching-day": {
+    permissions: ["dashboard.teacher.read"],
+    adapterReady: true,
+  },
   "finance-overview": null,
   child: null,
   learning: null,
@@ -89,6 +94,12 @@ const staff: WorkspaceNavigationItem = {
   href: "/dashboard/staff",
   icon: "user",
   capability: "staff",
+};
+const announcements: WorkspaceNavigationItem = {
+  label: "Announcements",
+  href: "/dashboard/announcements",
+  icon: "bell",
+  capability: "announcements",
 };
 const classes: WorkspaceNavigationItem = {
   label: "Classes",
@@ -137,6 +148,7 @@ const schoolAdminNavigation = [
   academics,
   analytics,
   reports,
+  announcements,
 ];
 
 export const rolePolicies = {
@@ -179,6 +191,7 @@ export const rolePolicies = {
       "overview",
       "students",
       "staff",
+      "announcements",
       "classes",
       "attendance",
       "fees",
@@ -198,6 +211,7 @@ export const rolePolicies = {
       "overview",
       "students",
       "staff",
+      "announcements",
       "classes",
       "attendance",
       "fees",
@@ -216,6 +230,7 @@ export const rolePolicies = {
     capabilities: [
       "overview",
       "teaching-day",
+      "announcements",
       "classes",
       "attendance",
       "academics",
@@ -231,6 +246,7 @@ export const rolePolicies = {
       classes,
       attendance,
       academics,
+      announcements,
     ],
     settingsEnabled: false,
   },

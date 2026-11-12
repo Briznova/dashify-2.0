@@ -44,4 +44,30 @@ describe("API-mode school dashboard", () => {
     expect(screen.queryByText("Fee position")).not.toBeInTheDocument();
     expect(screen.queryByText(/from last month/i)).not.toBeInTheDocument();
   });
+
+  it("renders the principal daily attendance snapshot without mock panels", async () => {
+    mocks.getOverview.mockResolvedValue({
+      role: "principal",
+      schoolName: "Northstar School",
+      localDate: "2026-04-03",
+      metrics: [
+        { label: "Present", value: "12", icon: "check", tone: "green" },
+        { label: "Absent", value: "2", icon: "alert", tone: "orange" },
+        { label: "Late", value: "1", icon: "clock", tone: "violet" },
+        { label: "Excused", value: "1", icon: "info", tone: "blue" },
+        { label: "Unmarked", value: "3", icon: "calendarCheck", tone: "orange" },
+      ],
+      enrollment: [],
+      pendingApprovals: [],
+      upcomingEvents: [],
+    });
+
+    render(<SchoolDashboardView role="principal" userName="Avery Johnson" />);
+
+    expect(await screen.findByText("Present")).toBeInTheDocument();
+    expect(screen.getByText("Daily attendance snapshot for 2026-04-03 (school local date).")).toBeInTheDocument();
+    expect(screen.getByText("Unmarked")).toBeInTheDocument();
+    expect(screen.queryByText("Fee position")).not.toBeInTheDocument();
+    expect(screen.queryByText(/from last month/i)).not.toBeInTheDocument();
+  });
 });

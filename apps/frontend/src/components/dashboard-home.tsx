@@ -33,11 +33,27 @@ export function DashboardHome() {
     );
   }
 
-  if (isApiMode) {
+  if (
+    isApiMode &&
+    session.user.role !== "super_admin" &&
+    session.user.role !== "school_admin" &&
+    session.user.role !== "principal" &&
+    session.user.role !== "teacher"
+  ) {
     return (
       <p className={styles.sessionState} role="status">
-        Your role workspace is signed in, but dashboard data is not connected
-        yet.
+        Dashboard data is not connected for this role yet.
+      </p>
+    );
+  }
+  if (
+    isApiMode &&
+    session.scope === "platform" &&
+    !session.permissionKeys.includes("platform.schools.read")
+  ) {
+    return (
+      <p className={styles.sessionState} role="alert">
+        This platform session does not have school-directory access.
       </p>
     );
   }

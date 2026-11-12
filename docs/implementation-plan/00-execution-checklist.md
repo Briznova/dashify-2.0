@@ -138,30 +138,53 @@ Phase 3 implementation evidence (2026-11-12): 54 frontend tests, lint, TypeScrip
 
 ## Phase 5 — Prioritize and implement remaining capabilities
 
-**Status:** In progress — staff/teacher assignment, student editing, class/section creation, school-admin dashboard, and the first attendance-report slice are complete; remaining items stay decision-gated
+**Status:** In progress — delivered staff/teacher assignment, student editing, class/section creation, School Admin/Principal/Teacher dashboards, attendance reporting, announcements, and the read-only platform directory; other Phase 5 areas still require feature-level decisions
 **Reference:** [Backend capability backlog](./05-backend-capability-backlog.md)
 
+- [x] Product approves all twelve remaining Phase 5 areas for prioritization (2026-11-13); this does not approve unresolved feature behavior, API contracts, permissions, or implementation details.
+- [x] Resolve the first staff-account slice using existing user accounts only; grant Teacher role only, defer invitations/credentials and other role grants, and preserve the global account on deactivation.
+- [x] Implement active-school staff profile create/update/deactivate, existing-account Teacher linkage, assignment cleanup, and audit events.
+- [x] Update staff OpenAPI, implementation-plan baseline, and frontend staff management UI; verify school scoping and role behavior with focused tests.
 - [x] Product confirms release scope and priority for staff/teacher assignment.
 - [x] Implement the approved staff/teacher-assignment vertical slice across backend, permissions, and API-mode frontend integration.
 - [x] Approve and implement student editing / guardian lifecycle as a separate school-scoped slice.
 - [x] Approve and implement class/section creation; defer edits, deactivation, and deletion.
 - [x] Product approves the school-administrator dashboard count slice; other role-specific data requirements remain open.
 - [x] Implement the approved school-administrator current-count dashboard slice across backend and API-mode frontend.
+- [x] Select the Principal daily attendance snapshot as the first additional role dashboard slice; keep other role dashboards gated.
+- [x] Implement the tenant-scoped Principal attendance snapshot, separate permission, API-mode KPI cards, and contract/spec updates; do not assign the Principal role to existing users.
+- [x] Select a read-only Teacher dashboard limited to active assigned classes/sections, local-day session status, and aggregate unmarked counts; require an authenticated Teacher role and a unique active staff-profile link.
+- [x] Implement the Teacher dashboard endpoint, separate permission, role/assignment-scope tests, API-mode UI, and contract/spec updates; do not assign the Teacher role to existing users.
 - [x] Product approves the first school-admin attendance-report slice.
-- [x] Implement the read-only date-range attendance report for closed sessions; defer exports and other report types.
-- [ ] Product confirms remaining report types, export formats, and retention.
+- [x] Implement the read-only date-range attendance report for closed sessions; defer other report types.
+- [x] Product approves CSV download of the aggregate attendance report only; no server-side export retention.
+- [x] Implement client-generated CSV download from the currently displayed aggregate report.
+- [x] User delegates a pragmatic next report scope; select a per-day breakdown in the existing closed-session school-admin report with no entity-level detail.
+- [x] Implement per-day attendance aggregates that reconcile with report totals and include them in the CSV.
+- [x] Implement the conservative school-wide in-app announcement slice: School Admin draft/publish, active-school published list for School Admin/Principal/Teacher, permission grants, audit events, and API-mode UI; defer read receipts, audience targeting, and outbound delivery.
+- [x] Implement a dedicated platform grant and platform-only session; do not infer platform authority from school roles or issue platform sessions to accounts with active school memberships.
+- [x] Add the audited, read-only platform school directory with only approved school metadata; deny school switching, membership listing, and school-record access from platform sessions.
+- [x] Connect Super Admin API-mode navigation and directory UI to `platform.schools.read`; retain server authorization as authoritative.
+- [ ] Decide MFA/recovery and production platform-grant provisioning, revocation, and break-glass controls before production use.
+- [ ] Product confirms other report types, PDF export, and any server-side export retention.
 - [ ] Product confirms academic assignment/submission workflows.
 - [ ] Product confirms parent/student linked-record and object-access requirements.
-- [ ] Product confirms announcements and notifications.
+- [ ] Product confirms broader notification delivery, read receipts, and announcement audience targeting.
 - [ ] Approve finance workflows before implementing fees/payments.
 - [ ] Approve storage/provider and document-access lifecycle before implementing files.
 - [ ] For each approved capability, implement one tested vertical slice and update specs/contracts.
 
 Phase 5 implementation evidence (2026-11-12): Class and section creation uses the active-school context, `academic_structure.manage`, duplicate-code conflict handling, and audit events. Frontend: 16 focused tests, TypeScript, targeted ESLint, and production build passed. Backend: 12 focused tests, typecheck, and build passed. No live API/database integration was run.
 
-Phase 5 dashboard scope decision: the user approved proceeding with the next dashboard item. The first slice is limited to school-administrator counts for active students, staff profiles, classes, and sections; the active school is derived from the authenticated session. Teacher, parent, principal, and platform dashboards, trends, attendance, finance, and caching remain gated for separate decisions.
+Phase 5 dashboard scope decision: school-administrator counts and the Principal daily snapshot were implemented first. The user then asked to proceed and delegated a pragmatic choice when unavailable to answer the scope question. The selected Teacher slice is read-only and limited to active assignments resolved from the authenticated user and active school, with school-local attendance-session status and unmarked counts only when a session exists. It uses a separate `dashboard.teacher.read` permission and does not assign Teacher roles to existing memberships. Parent/student linked-record dashboards, trends, finance, and caching remain gated. The later Super Admin request was implemented as a minimum-privilege read-only school directory; it does not include school lifecycle management, impersonation, or cross-school records.
 
-Phase 5 report scope decision: the user approved the first school-admin attendance-report slice. It returns aggregate status counts for closed sessions over an inclusive date range, with no student-level data or export; other report types and academic assignment/submission workflows remain open.
+Phase 5 report scope decision: the user approved an aggregate school-admin attendance report for closed sessions over an inclusive date range, then delegated a pragmatic next report addition. The added per-day aggregates expose no entity identifiers and reconcile to the summary; CSV is generated client-side and not stored by Dashify. Other report types, PDF export, server-side retention, and academic assignment/submission workflows remain open.
+
+Phase 5 staff-account implementation evidence (2026-11-13): School Admin can create/update/deactivate active-school staff profiles and link an existing account by email to the Teacher role. No production user credentials or invitations are created. The optional local synthetic seed provisions a dedicated demo Teacher login and linked staff profile for development preview only. Deactivation disables active teacher assignments, removes only the Teacher role, and revokes the school membership only when no other roles remain. Backend focused service tests, typecheck, and Prisma validation passed; frontend adapter/UI tests, typecheck, and targeted ESLint passed. The added unique profile-link migration has not yet been applied to the local database.
+
+Phase 5 announcement scope decision (2026-11-13): Implemented a conservative in-app, school-wide first slice. School Admin can create drafts and publish; School Admin, Principal, and Teacher can read published announcements for their authenticated active school. Audience targeting, read receipts, attachments, parent/student access, email, and SMS remain deferred. The exact permission mapping and endpoints are in [announcements API contract](../api-contracts/announcements.openapi.yaml).
+
+Phase 5 platform administration scope decision: The request for a Super Admin with proper access is implemented conservatively as a dedicated platform-only identity and read-only school directory. Platform authority is a separate `PlatformAdminGrant`, never a school role; the platform session receives only `platform.schools.read`, cannot list/select school memberships, and is revalidated on login, refresh, session restore, and guarded requests. The school-admin staff slice continues to support active-school staff profile management and existing-account Teacher linkage only. No platform user was created because no dedicated credentials were provided; local bootstrap is optional via `SEED_PLATFORM_ADMIN_EMAIL` and `SEED_PLATFORM_ADMIN_PASSWORD`. MFA/recovery and production grant lifecycle are open.
 
 ## Phase 6 — Security hardening, staging, and release
 
@@ -189,7 +212,12 @@ Phase 5 report scope decision: the user approved the first school-admin attendan
 | 2026-11-12 | 5.0 — Staff/teacher assignment approval | Product approved the Phase 5 staff/teacher-assignment slice. Backend staff schema, permission keys, and list/create/assignment endpoints were added and route-validation coverage was recorded. | Copilot |
 | 2026-11-12 | Phase 4 — School profile, academic years, and attendance | Added active-school profile read/update, academic-year list/create, timezone-derived attendance dates, session list/create/roster/mark/close, and a tenant-scoped roster endpoint. Existing attendance records are immutable through the mark route; correction workflow remains deferred. Frontend adapter coverage and backend tenant/permission/DTO tests added. Frontend: 64 tests, lint, TypeScript, and production build passed. Backend: 38 tests, typecheck, and build passed. No live API/database integration was run. | Copilot |
 | 2026-11-12 | Phase 5 — School administrator dashboard | Added tenant-scoped active counts with `dashboard.read`, the API-mode KPI adapter/rendering, and the dashboard contract. Backend: 4 focused tests, typecheck, and build passed; frontend: 18 focused tests, targeted ESLint, TypeScript, and production build passed. No live API/database integration was run. | Copilot |
+| 2026-11-12 | Phase 5 — Dashboard permission rollout | Confirmed the local database was missing `dashboard.read` and its `SCHOOL_ADMIN` role grant. Added and applied an idempotent migration; verified the permission and grant in the local database. Dashboard authorization and JWT permission tests: 4 passed. | Copilot |
+| 2026-11-12 | Phase 5 — Principal attendance dashboard | Added `GET /api/v1/dashboard/principal` with school-local date semantics, active enrolled session-roster aggregates, and the separate `dashboard.principal.read` permission. Backend focused tests (8), typecheck, and build passed; frontend focused tests (30), TypeScript/build, targeted lint, and `git diff --check` passed. Applied the migration to the confirmed local `dashify` database and verified one Principal role, its permission grant, and zero memberships assigned to it; Prisma reports all six migrations applied. | Copilot |
+| 2026-11-12 | Phase 5 — Teacher assigned-class dashboard | Added `GET /api/v1/dashboard/teacher`, requiring the Teacher workspace role, `dashboard.teacher.read`, and exactly one active staff profile linked to the authenticated user in the active school. It returns active assigned class/section attendance-session status and aggregate unmarked counts for the school-local date, with null counts when no session exists and no student identifiers. Backend: all 69 unit tests, typecheck, build, and Prisma validation passed. Frontend: all 97 tests, typecheck, targeted ESLint, and production build passed; repository-wide lint still reports an unrelated existing error in `student-record.tsx`. Applied the additive migration to the confirmed local `dashify` database and verified one Teacher role/grant and zero memberships assigned to it. No live API request with a linked Teacher fixture was run. | Copilot |
 | 2026-11-12 | Phase 5 — School attendance report | Added the tenant-scoped closed-session attendance aggregate endpoint and API-mode date-range report UI. Backend: 10 focused tests including attendance regression, typecheck, build, and report-file formatting passed; frontend: 57 focused tests, targeted ESLint, typecheck, and production build passed. No live API/database integration was run. | Copilot |
+| 2026-11-12 | Phase 5 — Attendance CSV export | Added an on-demand frontend CSV download of the aggregate report; no server-generated file or retained export. Frontend: 7 focused tests, targeted ESLint, TypeScript check, production build, and `git diff --check` passed. No live API/database integration was run. | Copilot |
+| 2026-11-12 | Phase 5 — Daily attendance breakdown | Added chronological per-day counts within the same tenant-scoped closed-session report; CSV includes the daily rows. Backend: 6 focused tests, typecheck, build, Prettier check, and read-only SQL smoke test passed; frontend: 10 focused tests, targeted ESLint, typecheck, and production build passed. No schema migration was needed. | Copilot |
 
 ## Blockers / decisions needed
 

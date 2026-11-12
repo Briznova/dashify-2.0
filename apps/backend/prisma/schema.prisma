@@ -60,6 +60,12 @@ enum AnnouncementStatus {
   ARCHIVED
 }
 
+enum AuthScope {
+  PLATFORM
+  SCHOOL_SELECTION
+  SCHOOL
+}
+
 enum NotificationType {
   GENERAL
   ATTENDANCE
@@ -117,6 +123,7 @@ model User {
   refreshTokens RefreshToken[]
   passwordResetTokens PasswordResetToken[]
   notifications Notification[]
+  platformAdminGrant PlatformAdminGrant?
 
   @@map("users")
 }
@@ -182,6 +189,17 @@ model MembershipRole {
   @@map("membership_roles")
 }
 
+model PlatformAdminGrant {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @unique @map("user_id") @db.Uuid
+  grantedAt DateTime  @default(now()) @map("granted_at")
+  revokedAt DateTime? @map("revoked_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([revokedAt])
+  @@map("platform_admin_grants")
+}
+
 model RefreshToken {
   id          String @id @default(uuid()) @db.Uuid
   userId      String @db.Uuid @map("user_id")
@@ -193,6 +211,7 @@ model RefreshToken {
   activeSchoolId      String?   @map("active_school_id") @db.Uuid
   membershipId        String?   @map("membership_id") @db.Uuid
   activeWorkspaceRole String?   @map("active_workspace_role")
+  scope                AuthScope @default(SCHOOL_SELECTION)
   createdAt   DateTime @default(now()) @map("created_at")
   user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -288,6 +307,7 @@ model StaffProfile {
   school    School @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   teacherAssignments TeacherAssignment[]
 
+  @@unique([schoolId, userId])
   @@unique([schoolId, employeeCode])
   @@index([schoolId, isActive])
   @@map("staff_profiles")

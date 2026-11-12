@@ -1,4 +1,4 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class AuthUserResponseDto {
   @ApiProperty({ format: "uuid" })
@@ -53,9 +53,30 @@ export class AuthLoginResponseDto {
 
   @ApiProperty({ type: ActiveSchoolResponseDto, nullable: true })
   activeSchool!: ActiveSchoolResponseDto | null;
+
+  @ApiPropertyOptional({ type: [String] })
+  workspaceRoles?: string[];
+
+  @ApiPropertyOptional({ nullable: true })
+  activeWorkspaceRole?: string | null;
+
+  @ApiPropertyOptional({ type: [String] })
+  permissionKeys?: string[];
 }
 
-export class AuthSessionResponseDto extends AuthLoginResponseDto {
+export class AuthSessionResponseDto {
+  @ApiProperty({ type: AuthUserResponseDto })
+  user!: AuthUserResponseDto;
+
+  @ApiProperty({ enum: ["platform", "school-selection", "school"] })
+  scope!: "platform" | "school-selection" | "school";
+
+  @ApiProperty({ type: [AuthMembershipResponseDto] })
+  memberships!: AuthMembershipResponseDto[];
+
+  @ApiProperty({ type: ActiveSchoolResponseDto, nullable: true })
+  activeSchool!: ActiveSchoolResponseDto | null;
+
   @ApiProperty({ type: [String] })
   workspaceRoles!: string[];
 

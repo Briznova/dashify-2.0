@@ -211,6 +211,35 @@ describe("auth session and workspace UI", () => {
     });
   });
 
+  it("fills local seeded credentials when a development account is selected", () => {
+    render(
+      <AuthFlow
+        mode="sign-in"
+        devSeededAccounts={[
+          {
+            role: "School admin (seeded)",
+            email: "school-admin@local.test",
+            password: "local-only-password",
+          },
+          {
+            role: "Teacher (seeded)",
+            email: "teacher@local.test",
+            password: "teacher-only-password",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Teacher (seeded)" }));
+
+    expect(screen.getByLabelText("Work email")).toHaveValue(
+      "teacher@local.test",
+    );
+    expect(screen.getByLabelText("Password")).toHaveValue(
+      "teacher-only-password",
+    );
+  });
+
   it("keeps the dashboard open and displays an error when logout fails", async () => {
     mocks.authService.getSession.mockResolvedValueOnce(session("school_admin"));
     mocks.authService.signOut.mockRejectedValueOnce(

@@ -1,0 +1,23 @@
+.page {
+  display: grid;
+  gap: 18px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.notice {
+  margin: 0;
+  color: #586176;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,11 +1,14 @@
 import type {
   AcademicYear,
+  Announcement,
   AttendanceReport,
   AttendanceRosterStudent,
   AttendanceSession,
   CreateAcademicSectionInput,
+  CreateAnnouncementInput,
   CreateAcademicYearInput,
   CreateClassroomInput,
+  CreateStaffInput,
   AcademicReport,
   Assignment,
   AttendanceRecord,
@@ -14,6 +17,7 @@ import type {
   FeeRecord,
   PortalOverview,
   PortalRole,
+  PlatformSchool,
   School,
   SchoolOverview,
   SchoolRole,
@@ -24,12 +28,15 @@ import type {
   StudentInput,
   StudentPage,
   SchoolProfile,
+  TeacherDashboard,
+  UpdateStaffInput,
   UpdateSchoolProfileInput,
   MarkAttendanceInput,
 } from "@/types/school";
 
 export interface SchoolService {
   getOverview(role: SchoolRole, signal?: AbortSignal): Promise<SchoolOverview>;
+  getTeacherDashboard(signal?: AbortSignal): Promise<TeacherDashboard>;
   getPortalOverview(role: PortalRole, signal?: AbortSignal): Promise<PortalOverview>;
   getStudents(page?: number, pageSize?: number, signal?: AbortSignal): Promise<StudentPage>;
   getStudent(id: string, signal?: AbortSignal): Promise<Student>;
@@ -38,10 +45,17 @@ export interface SchoolService {
   getAcademicYears(signal?: AbortSignal): Promise<AcademicYear[]>;
   createAcademicYear(input: CreateAcademicYearInput): Promise<AcademicYear>;
   getStaff(signal?: AbortSignal): Promise<StaffMember[]>;
+  getAnnouncements(includeDrafts?: boolean, signal?: AbortSignal): Promise<Announcement[]>;
+  createAnnouncement(input: CreateAnnouncementInput): Promise<Announcement>;
+  publishAnnouncement(id: string): Promise<Announcement>;
+  createStaff(input: CreateStaffInput): Promise<StaffMember>;
+  updateStaff(id: string, input: UpdateStaffInput): Promise<StaffMember>;
+  deactivateStaff(id: string): Promise<void>;
   getClassrooms(signal?: AbortSignal): Promise<Classroom[]>;
   createClassroom(input: CreateClassroomInput): Promise<Classroom>;
   createAcademicSection(input: CreateAcademicSectionInput): Promise<AcademicSection>;
   getSchools(signal?: AbortSignal): Promise<School[]>;
+  getPlatformSchools(signal?: AbortSignal): Promise<PlatformSchool[]>;
   getAttendance(signal?: AbortSignal): Promise<AttendanceRecord[]>;
   getAttendanceReport(fromDate: string, toDate: string, signal?: AbortSignal): Promise<AttendanceReport>;
   getAttendanceSessions(date: string, signal?: AbortSignal): Promise<AttendanceSession[]>;

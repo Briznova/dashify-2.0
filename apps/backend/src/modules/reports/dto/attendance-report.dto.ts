@@ -14,6 +14,20 @@ export class AttendanceReportStatusCountsDto {
   EXCUSED!: number;
 }
 
+export class AttendanceReportDailyBreakdownDto {
+  @ApiProperty({ format: "date" })
+  date!: string;
+
+  @ApiProperty({ minimum: 1 })
+  totalSessions!: number;
+
+  @ApiProperty({ minimum: 0 })
+  totalRecords!: number;
+
+  @ApiProperty({ type: AttendanceReportStatusCountsDto })
+  statusCounts!: AttendanceReportStatusCountsDto;
+}
+
 export class AttendanceReportDto {
   @ApiProperty({ format: "date" })
   fromDate!: string;
@@ -29,4 +43,7 @@ export class AttendanceReportDto {
 
   @ApiProperty({ type: AttendanceReportStatusCountsDto })
   statusCounts!: AttendanceReportStatusCountsDto;
+
+  @ApiProperty({ type: [AttendanceReportDailyBreakdownDto] })
+  dailyBreakdown!: AttendanceReportDailyBreakdownDto[];
 }

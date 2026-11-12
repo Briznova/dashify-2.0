@@ -1,11 +1,12 @@
 openapi: 3.0.3
 info:
-  title: DASHIFY School Administrator Dashboard Contract
+  title: DASHIFY School, Principal, and Teacher Dashboard Contract
   version: 1.0.0
   description: >
-    Approved first dashboard slice. This contract covers current active counts
-    for school administrators only; other roles and trend/period metrics remain
-    out of scope.
+    This contract covers the school-administrator current-count slice, the
+    principal daily attendance snapshot, and the teacher assigned-class
+    attendance snapshot. Other roles and trend/period metrics remain out of
+    scope.
 servers:
   - url: http://localhost:3001/api/v1
     description: Local development URL
@@ -37,6 +38,67 @@ paths:
           description: Authentication is required
         "403":
           description: The session lacks dashboard.read
+        "404":
+          description: The active school is missing or inactive
+  /dashboard/principal:
+    get:
+      tags: [Dashboard]
+      operationId: getPrincipalDashboard
+      summary: Get the active school's daily attendance snapshot
+      description: >
+        Requires an authenticated school membership with an active school
+        context and the dashboard.principal.read permission. The localDate is
+        derived from the active school's timezone. Counts cover active
+        student-session roster entries only for attendance sessions that exist
+        on that date. A student without a record in an existing session is
+        unmarked; a class with no session is not counted as unmarked. No
+        student-level identifiers are returned.
+      security:
+        - accessCookie: []
+      responses:
+        "200":
+          description: Daily attendance aggregates for the active school
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrincipalDashboard"
+        "400":
+          description: The session has no active school context
+        "401":
+          description: Authentication is required
+        "403":
+          description: The session lacks dashboard.principal.read
+        "404":
+          description: The active school is missing or inactive
+  /dashboard/teacher:
+    get:
+      tags: [Dashboard]
+      operationId: getTeacherDashboard
+      summary: Get the authenticated teacher's assigned-class attendance snapshot
+      description: >
+        Requires the Teacher workspace role, an active school context, and
+        dashboard.teacher.read. The server resolves exactly one active
+        staff profile linked to the authenticated user in the active school.
+        Active class assignments cover all active sections in that class;
+        section assignments cover only their assigned section. The localDate
+        comes from the active school's timezone. A section without a session
+        has null sessionStatus and unmarkedCount. Student identifiers are never
+        returned.
+      security:
+        - accessCookie: []
+      responses:
+        "200":
+          description: Assigned classes and aggregate attendance session state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherDashboard"
+        "400":
+          description: The session has no active school context
+        "401":
+          description: Authentication is required
+        "403":
+          description: The session lacks the Teacher role or dashboard.teacher.read
         "404":
           description: The active school is missing or inactive
 components:
@@ -78,3 +140,103 @@ components:
           type: integer
           minimum: 0
           description: Active sections belonging to active classes in the active school.
+    PrincipalDashboard:
+      type: object
+      additionalProperties: false
+      required:
+        - schoolId
+        - schoolName
+        - localDate
+        - presentCount
+        - absentCount
+        - lateCount
+        - excusedCount
+        - unmarkedCount
+      properties:
+        schoolId:
+          type: string
+          format: uuid
+        schoolName:
+          type: string
+        localDate:
+          type: string
+          format: date
+          description: Current calendar date in the active school's timezone.
+        presentCount:
+          type: integer
+          minimum: 0
+          description: Active student-session entries marked present on localDate.
+        absentCount:
+          type: integer
+          minimum: 0
+          description: Active student-session entries marked absent on localDate.
+        lateCount:
+          type: integer
+          minimum: 0
+          description: Active student-session entries marked late on localDate.
+        excusedCount:
+          type: integer
+          minimum: 0
+          description: Active student-session entries marked excused on localDate.
+        unmarkedCount:
+          type: integer
+          minimum: 0
+          description: >
+            Active student-session entries with no attendance record, limited to
+            sessions created for localDate. Classes without a session do not
+            contribute to this count.
+    TeacherDashboard:
+      type: object
+      additionalProperties: false
+      required: [schoolId, schoolName, localDate, assignments]
+      properties:
+        schoolId:
+          type: string
+          format: uuid
+        schoolName:
+          type: string
+        localDate:
+          type: string
+          format: date
+          description: Current calendar date in the active school's timezone.
+        assignments:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeacherDashboardAssignment"
+    TeacherDashboardAssignment:
+      type: object
+      additionalProperties: false
+      required:
+        - classId
+        - className
+        - sectionId
+        - sectionName
+        - subject
+        - sessionStatus
+        - unmarkedCount
+      properties:
+        classId:
+          type: string
+          format: uuid
+        className:
+          type: string
+        sectionId:
+          type: string
+          format: uuid
+        sectionName:
+          type: string
+        subject:
+          type: string
+          nullable: true
+        sessionStatus:
+          type: string
+          enum: [OPEN, CLOSED]
+          nullable: true
+          description: Null when no attendance session exists on localDate.
+        unmarkedCount:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: >
+            Active enrolled students without an attendance record for an
+            existing session. Null when sessionStatus is null.

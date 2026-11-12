@@ -3,13 +3,13 @@ info:
   title: DASHIFY Authentication and Session Contract
   version: 1.0.0-draft.1
   description: >
-    Approved planning contract for browser authentication, school/workspace
-    selection, and current-session refresh/logout. Password-reset operations
-    are proposed only; their delivery provider and abuse-control details remain
-    unapproved. This contract does not describe the currently implemented API.
+    Browser authentication and session contract for cookie-based login,
+    school/workspace selection, platform-only scope, and session refresh/logout.
+    Password-reset operations remain proposed only; their delivery provider
+    and abuse-control details are not part of the implemented API.
 servers:
   - url: http://localhost:3001/api/v1
-    description: Proposed local development URL; reconcile runtime config before implementation
+    description: Local development API URL
 tags:
   - name: Authentication
   - name: Password reset
@@ -23,6 +23,9 @@ paths:
         Sets HttpOnly access and refresh cookies and a CSRF cookie. Never
         returns credential values in JSON. A platform-only account receives a
         platform-scoped session and no school memberships in active context.
+        Platform scope requires an active PlatformAdminGrant; it is not inferred
+        from a school role. The platform grant is revalidated on session restore,
+        refresh, and protected requests.
       security: []
       parameters:
         - $ref: "#/components/parameters/Origin"
@@ -62,6 +65,8 @@ paths:
         Rotates the current refresh credential and auth cookies. Rejects
         expired, revoked, reused, or no-longer-authorized sessions. Preserves
         the selected school/workspace only while its membership is active.
+        Platform sessions require an active platform grant and preserve no
+        school context.
       security:
         - refreshCookie: []
       parameters:
@@ -129,12 +134,15 @@ paths:
       tags: [Authentication]
       operationId: listMySchools
       summary: List active school memberships for the authenticated user
-      description: This is a membership list, not a platform-wide school directory.
+      description: >
+        This is a membership list, not a platform-wide school directory.
+        Platform-only sessions receive 403; use the platform directory endpoint
+        for approved metadata.
       security:
         - accessCookie: []
       responses:
         "200":
-          description: Membership choices
+          description: Membership choices; forbidden for platform-only sessions
           content:
             application/json:
               schema:
@@ -143,6 +151,8 @@ paths:
                   $ref: "#/components/schemas/Membership"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /auth/active-school:
     post:
       tags: [Authentication]
@@ -295,6 +305,19 @@ components:
           allOf:
             - $ref: "#/components/schemas/ActiveSchool"
           nullable: true
+        workspaceRoles:
+          type: array
+          items:
+            type: string
+          description: Present on platform login; empty for a platform-only session.
+        activeWorkspaceRole:
+          type: string
+          nullable: true
+        permissionKeys:
+          type: array
+          items:
+            type: string
+          description: Server-derived permissions; platform login receives only platform.schools.read.
     SessionResponse:
       allOf:
         - $ref: "#/components/schemas/LoginResponse"

@@ -16,6 +16,8 @@ import { AuditModule } from "./modules/audit/audit.module";
 import { StaffModule } from "./modules/staff/staff.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { ReportsModule } from "./modules/reports/reports.module";
+import { AnnouncementsModule } from "./modules/announcements/announcements.module";
+import { PlatformModule } from "./modules/platform/platform.module";
 import { CsrfGuard } from "./common/guards/csrf.guard";
 
 @Module({
@@ -65,6 +67,8 @@ import { CsrfGuard } from "./common/guards/csrf.guard";
     StaffModule,
     DashboardModule,
     ReportsModule,
+    AnnouncementsModule,
+    PlatformModule,
     AuditModule,
   ],
   providers: [

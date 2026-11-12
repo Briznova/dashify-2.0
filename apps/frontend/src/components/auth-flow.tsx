@@ -11,6 +11,7 @@ import { Icon } from "@/components/ui/icon";
 import styles from "./auth-flow.module.css";
 
 type AuthMode = "sign-in" | "sign-up" | "forgot-password" | "reset-password" | "select-workspace";
+type DevSeededAccount = { role: string; email: string; password: string };
 
 const authLinks = {
   "sign-in": { eyebrow: "AUTH & ACCOUNT / LOG IN", top: "Need help? Contact your school administrator." },
@@ -91,7 +92,7 @@ function ErrorMessage({ children }: { children: ReactNode }) {
   return <p className={styles.errorMessage} role="alert">{children}</p>;
 }
 
-function SignInForm() {
+function SignInForm({ devSeededAccounts }: { devSeededAccounts: DevSeededAccount[] }) {
   const router = useRouter();
   const { signIn, selectSchool, error, isPending } = useAuth();
   const [email, setEmail] = useState("");
@@ -167,6 +168,29 @@ function SignInForm() {
             </div>
           </div>
         </div>}
+        {isApiMode && devSeededAccounts.length > 0 && (
+          <div className={styles.demoNote}>
+            <span><Icon name="sparkles" size={17} /></span>
+            <div>
+              <p><strong>Local development only</strong> Select a seeded account to fill its email and password.</p>
+              <div className={styles.demoAccounts} aria-label="Local seeded accounts">
+                {devSeededAccounts.map((account) => (
+                  <button
+                    type="button"
+                    key={account.email}
+                    aria-pressed={email.toLowerCase() === account.email.toLowerCase()}
+                    onClick={() => {
+                      setEmail(account.email);
+                      setPassword(account.password);
+                    }}
+                  >
+                    {account.role}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </AuthFrame>
   );
@@ -460,14 +484,16 @@ export function AuthFlow({
   mode,
   initialEmail = "",
   initialToken = "",
+  devSeededAccounts = [],
 }: {
   mode: AuthMode;
   initialEmail?: string;
   initialToken?: string;
+  devSeededAccounts?: DevSeededAccount[];
 }) {
   switch (mode) {
     case "sign-in":
-      return <SignInForm />;
+      return <SignInForm devSeededAccounts={devSeededAccounts} />;
     case "sign-up":
       return <SignUpForm />;
     case "forgot-password":

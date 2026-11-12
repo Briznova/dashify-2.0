@@ -1,0 +1,175 @@
+openapi: 3.1.0
+info:
+  title: Dashify Announcements API
+  version: 1.0.0
+  description: School-wide in-app announcements for the authenticated active school.
+servers:
+  - url: /api/v1
+security:
+  - accessCookie: []
+paths:
+  /announcements:
+    get:
+      operationId: listPublishedAnnouncements
+      summary: List published school-wide announcements
+      x-required-permission: announcements.read
+      x-tenant-scope: authenticated active school
+      responses:
+        "200":
+          description: Published announcements for the active school
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Announcement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createAnnouncementDraft
+      summary: Create a school-wide announcement draft
+      x-required-permission: announcements.manage
+      x-tenant-scope: authenticated active school
+      parameters:
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAnnouncement"
+      responses:
+        "201":
+          description: Draft created; not visible to readers until published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /announcements/manage:
+    get:
+      operationId: listAnnouncementsForManagement
+      summary: List school-wide drafts and published announcements
+      x-required-permission: announcements.manage
+      x-tenant-scope: authenticated active school
+      responses:
+        "200":
+          description: School-wide announcements, including drafts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Announcement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /announcements/{id}/publish:
+    post:
+      operationId: publishAnnouncement
+      summary: Publish an unpublished school-wide announcement
+      x-required-permission: announcements.manage
+      x-tenant-scope: authenticated active school
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "201":
+          description: Published announcement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+components:
+  securitySchemes:
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: dashify_access
+  parameters:
+    OriginHeader:
+      name: Origin
+      in: header
+      required: true
+      schema:
+        type: string
+    CsrfHeader:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+  schemas:
+    CreateAnnouncement:
+      type: object
+      additionalProperties: false
+      required: [title, body]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        body:
+          type: string
+          minLength: 1
+          maxLength: 10000
+    Announcement:
+      type: object
+      required: [id, title, body, status, publishedAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED]
+        publishedAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+  responses:
+    BadRequest:
+      description: Invalid announcement input
+    Unauthorized:
+      description: Authentication required
+    Forbidden:
+      description: Missing permission or invalid active-school context
+    NotFound:
+      description: Announcement not found in the active school
+    Conflict:
+      description: Announcement is not an unpublished school-wide draft

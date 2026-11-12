@@ -4,12 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import { schoolService } from "@/services";
 import type {
   AcademicYear,
+  Announcement,
   AttendanceReport,
   AttendanceRosterStudent,
   AttendanceSession,
   CreateAcademicSectionInput,
+  CreateAnnouncementInput,
   CreateAcademicYearInput,
   CreateClassroomInput,
+  CreateStaffInput,
   AcademicReport,
   Assignment,
   AttendanceRecord,
@@ -17,17 +20,20 @@ import type {
   FeeRecord,
   PortalOverview,
   PortalRole,
+  PlatformSchool,
   School,
   SchoolOverview,
   SchoolRole,
   SchoolSettingsData,
   SchoolProfile,
   UpdateSchoolProfileInput,
+  UpdateStaffInput,
   StaffMember,
   Student,
   StudentCreateInput,
   StudentInput,
   StudentPage,
+  TeacherDashboard,
 } from "@/types/school";
 
 type ResourceState<T> = {
@@ -98,6 +104,14 @@ export function useSchoolOverview(role: SchoolRole) {
   return useRemoteResource<SchoolOverview>(load);
 }
 
+export function useTeacherDashboard() {
+  const load = useCallback(
+    (signal: AbortSignal) => schoolService.getTeacherDashboard(signal),
+    [],
+  );
+  return useRemoteResource<TeacherDashboard>(load);
+}
+
 export function usePortalOverview(role: PortalRole) {
   const load = useCallback(
     (signal: AbortSignal) => schoolService.getPortalOverview(role, signal),
@@ -157,6 +171,115 @@ export function useStaff() {
   return useRemoteResource<StaffMember[]>(load);
 }
 
+export function useAnnouncements(includeDrafts: boolean) {
+  const load = useCallback(
+    (signal: AbortSignal) =>
+      schoolService.getAnnouncements(includeDrafts, signal),
+    [includeDrafts],
+  );
+  return useRemoteResource<Announcement[]>(load);
+}
+
+export function useAnnouncementActions() {
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const execute = useCallback(async (
+    action: () => Promise<Announcement>,
+  ): Promise<Announcement | null> => {
+    setIsPending(true);
+    setError(null);
+    try {
+      return await action();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to update announcements.",
+      );
+      return null;
+    } finally {
+      setIsPending(false);
+    }
+  }, []);
+
+  const create = useCallback(
+    (input: CreateAnnouncementInput) =>
+      execute(() => schoolService.createAnnouncement(input)),
+    [execute],
+  );
+  const publish = useCallback(
+    (id: string) => execute(() => schoolService.publishAnnouncement(id)),
+    [execute],
+  );
+
+  return { create, publish, isPending, error };
+}
+
+export function useSaveStaff() {
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = useCallback(
+    async (id: string | null, input: CreateStaffInput | UpdateStaffInput) => {
+      setIsPending(true);
+      setError(null);
+      try {
+        if (id) return await schoolService.updateStaff(id, input);
+        if (!input.employeeCode?.trim() || !input.firstName?.trim()) {
+          throw new Error("Employee code and first name are required.");
+        }
+        return await schoolService.createStaff({
+          employeeCode: input.employeeCode,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email,
+          phone: input.phone,
+          designation: input.designation,
+          department: input.department,
+          accountEmail:
+            "accountEmail" in input ? input.accountEmail : undefined,
+        });
+      } catch (reason) {
+        setError(
+          reason instanceof Error ? reason.message : "Unable to save this staff member.",
+        );
+        return null;
+      } finally {
+        setIsPending(false);
+      }
+    },
+    [],
+  );
+
+  return { save, isPending, error };
+}
+
+export function useDeactivateStaff() {
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const deactivate = useCallback(async (id: string) => {
+    setIsPending(true);
+    setError(null);
+    try {
+      await schoolService.deactivateStaff(id);
+      return true;
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to deactivate this staff member.",
+      );
+      return false;
+    } finally {
+      setIsPending(false);
+    }
+  }, []);
+
+  return { deactivate, isPending, error };
+}
+
 export function useClassrooms() {
   const load = useCallback((signal: AbortSignal) => schoolService.getClassrooms(signal), []);
   return useRemoteResource<Classroom[]>(load);
@@ -201,6 +324,14 @@ export function useCreateAcademicSection() {
 export function useSchools() {
   const load = useCallback((signal: AbortSignal) => schoolService.getSchools(signal), []);
   return useRemoteResource<School[]>(load);
+}
+
+export function usePlatformSchools() {
+  const load = useCallback(
+    (signal: AbortSignal) => schoolService.getPlatformSchools(signal),
+    [],
+  );
+  return useRemoteResource<PlatformSchool[]>(load);
 }
 
 export function useAttendance() {

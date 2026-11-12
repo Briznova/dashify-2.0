@@ -1,9 +1,19 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import type { AttendanceStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { parseCalendarDate } from "../../common/utils/calendar-date";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { AttendanceReportDto } from "./dto/attendance-report.dto";
 import { AttendanceReportQueryDto } from "./dto/attendance-report-query.dto";
+
+type DailyAttendanceAggregate = {
+  date: string;
+  totalSessions: number;
+  totalRecords: number;
+  present: number;
+  absent: number;
+  late: number;
+  excused: number;
+};
 
 @Injectable()
 export class ReportsService {
@@ -20,42 +30,62 @@ export class ReportsService {
     }
 
     return this.prisma.withTenant(schoolId, async (tx) => {
-      const sessionScope = {
-        schoolId,
-        status: "CLOSED" as const,
-        date: { gte: fromDate, lte: toDate },
-      };
-      const [totalSessions, groupedRecords] = await Promise.all([
-        tx.attendanceSession.count({ where: sessionScope }),
-        tx.attendanceRecord.groupBy({
-          by: ["status"],
-          where: {
-            schoolId,
-            session: { is: sessionScope },
-          },
-          _count: { _all: true },
+      const dailyAggregates = await tx.$queryRaw<DailyAttendanceAggregate[]>(
+        Prisma.sql`
+          SELECT
+            s."date"::text AS "date",
+            COUNT(DISTINCT s."id")::int AS "totalSessions",
+            COUNT(r."id")::int AS "totalRecords",
+            (COUNT(r."id") FILTER (WHERE r."status"::text = 'PRESENT'))::int AS "present",
+            (COUNT(r."id") FILTER (WHERE r."status"::text = 'ABSENT'))::int AS "absent",
+            (COUNT(r."id") FILTER (WHERE r."status"::text = 'LATE'))::int AS "late",
+            (COUNT(r."id") FILTER (WHERE r."status"::text = 'EXCUSED'))::int AS "excused"
+          FROM "attendance_sessions" s
+          LEFT JOIN "attendance_records" r
+            ON r."session_id" = s."id"
+            AND r."school_id" = s."school_id"
+          WHERE s."school_id" = ${schoolId}::uuid
+            AND s."status"::text = 'CLOSED'
+            AND s."date" >= ${query.fromDate}::date
+            AND s."date" <= ${query.toDate}::date
+          GROUP BY s."date"
+          ORDER BY s."date" ASC
+        `,
+      );
+      const dailyBreakdown = dailyAggregates.map((day) => ({
+        date: day.date,
+        totalSessions: day.totalSessions,
+        totalRecords: day.totalRecords,
+        statusCounts: {
+          PRESENT: day.present,
+          ABSENT: day.absent,
+          LATE: day.late,
+          EXCUSED: day.excused,
+        },
+      }));
+      const statusCounts = dailyBreakdown.reduce(
+        (total, day) => ({
+          PRESENT: total.PRESENT + day.statusCounts.PRESENT,
+          ABSENT: total.ABSENT + day.statusCounts.ABSENT,
+          LATE: total.LATE + day.statusCounts.LATE,
+          EXCUSED: total.EXCUSED + day.statusCounts.EXCUSED,
         }),
-      ]);
-
-      const statusCounts: Record<AttendanceStatus, number> = {
-        PRESENT: 0,
-        ABSENT: 0,
-        LATE: 0,
-        EXCUSED: 0,
-      };
-      for (const group of groupedRecords) {
-        statusCounts[group.status] = group._count._all;
-      }
+        { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 },
+      );
 
       return {
         fromDate: query.fromDate,
         toDate: query.toDate,
-        totalSessions,
-        totalRecords: Object.values(statusCounts).reduce(
-          (total, count) => total + count,
+        totalSessions: dailyBreakdown.reduce(
+          (total, day) => total + day.totalSessions,
+          0,
+        ),
+        totalRecords: dailyBreakdown.reduce(
+          (total, day) => total + day.totalRecords,
           0,
         ),
         statusCounts,
+        dailyBreakdown,
       };
     });
   }

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getAttendanceReport: vi.fn(),
+  downloadAttendanceReportCsv: vi.fn(),
   isApiMode: true,
 }));
 
@@ -13,6 +14,10 @@ vi.mock("@/services", () => ({
   schoolService: {
     getAttendanceReport: mocks.getAttendanceReport,
   },
+}));
+
+vi.mock("@/lib/attendance-report-csv", () => ({
+  downloadAttendanceReportCsv: mocks.downloadAttendanceReportCsv,
 }));
 
 import { AcademicReportsDirectory } from "@/components/school-dashboard";
@@ -31,6 +36,19 @@ describe("API-mode attendance report", () => {
         LATE: 2,
         EXCUSED: 1,
       },
+      dailyBreakdown: [
+        {
+          date: "2026-04-01",
+          totalSessions: 1,
+          totalRecords: 8,
+          statusCounts: {
+            PRESENT: 6,
+            ABSENT: 1,
+            LATE: 1,
+            EXCUSED: 0,
+          },
+        },
+      ],
     });
   });
 
@@ -45,15 +63,51 @@ describe("API-mode attendance report", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Generate report" }));
 
-    expect(await screen.findByText("Present")).toBeInTheDocument();
+    expect(await screen.findAllByText("Present")).toHaveLength(2);
     expect(screen.getByText("18")).toBeInTheDocument();
     expect(screen.getByText(/3 closed sessions · 24 attendance records/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Daily attendance breakdown" })).toBeInTheDocument();
+    expect(screen.getByText("2026-04-01")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Download CSV" })).toBeInTheDocument();
+    expect(screen.getByText(/downloaded to your device and is not stored by Dashify/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Download CSV" }));
+    expect(mocks.downloadAttendanceReportCsv).toHaveBeenCalledWith({
+      fromDate: "2026-04-01",
+      toDate: "2026-04-30",
+      totalSessions: 3,
+      totalRecords: 24,
+      statusCounts: {
+        PRESENT: 18,
+        ABSENT: 3,
+        LATE: 2,
+        EXCUSED: 1,
+      },
+      dailyBreakdown: [
+        {
+          date: "2026-04-01",
+          totalSessions: 1,
+          totalRecords: 8,
+          statusCounts: {
+            PRESENT: 6,
+            ABSENT: 1,
+            LATE: 1,
+            EXCUSED: 0,
+          },
+        },
+      ],
+    });
     expect(screen.queryByText("Term 1 academic performance")).not.toBeInTheDocument();
     expect(mocks.getAttendanceReport).toHaveBeenCalledWith(
       "2026-04-01",
       "2026-04-30",
       expect.any(AbortSignal),
     );
+  });
+
+  it("does not offer an export before an aggregate report is generated", () => {
+    render(<AcademicReportsDirectory />);
+
+    expect(screen.queryByRole("button", { name: "Download CSV" })).not.toBeInTheDocument();
   });
 
   it("rejects a reversed date range without making a request", () => {
@@ -85,6 +139,7 @@ describe("API-mode attendance report", () => {
         LATE: 0,
         EXCUSED: 0,
       },
+      dailyBreakdown: [],
     });
     render(<AcademicReportsDirectory />);
 

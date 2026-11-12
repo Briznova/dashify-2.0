@@ -17,8 +17,9 @@ The monorepo uses these links as the source of truth for coordinated feature wor
 | [Execution checklist](./00-execution-checklist.md) | Ordered, checkable tasks and progress log for doing the work one item at a time |
 | [Contract baseline](./01-contract-baseline.md) | Observed frontend/backend contracts and verified mismatches |
 | [Identity and tenancy spec](./02-identity-auth-tenancy-spec.md) | Auth/session, school selection, role mapping, and tenant boundaries |
-| [Auth/session OpenAPI contract](./contracts/auth-session.openapi.yaml) | Approved planning contract for auth and school/workspace selection; reset operations remain proposed |
-| [Dashboard OpenAPI contract](../api-contracts/dashboard.openapi.yaml) | Approved school-administrator current-count endpoint; other roles and trend metrics remain out of scope |
+| [Auth/session OpenAPI contract](../api-contracts/auth-session.openapi.yaml) | Browser auth, school/workspace selection, and platform-only session; reset operations remain proposed |
+| [Platform school-directory OpenAPI contract](../api-contracts/platform-schools.openapi.yaml) | Read-only school metadata for a dedicated platform-only session |
+| [Dashboard OpenAPI contract](../api-contracts/dashboard.openapi.yaml) | School-administrator counts, Principal daily attendance snapshot, and Teacher assigned-class attendance; other roles and trend metrics remain out of scope |
 | [Attendance report OpenAPI contract](../api-contracts/attendance-report.openapi.yaml) | Approved school-administrator aggregate report for closed sessions; no exports or student-level detail |
 | [Access and workspace spec](./03-access-and-workspace-spec.md) | Frontend role policy and its relationship to backend permissions |
 | [Core integration slices](./04-core-integration-slices.md) | Student, academic structure, and attendance vertical slices |

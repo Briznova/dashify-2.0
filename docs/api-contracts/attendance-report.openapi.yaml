@@ -1,11 +1,13 @@
 openapi: 3.0.3
 info:
   title: DASHIFY School Attendance Report Contract
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Approved first report slice. Returns aggregate attendance counts for closed
-    sessions in an inclusive date range for the authenticated active school.
-    Student-level detail, exports, and other report types remain out of scope.
+    sessions and a per-day breakdown for an inclusive date range for the
+    authenticated active school. The frontend can download these aggregate
+    fields as a CSV. Student-level detail, server-generated exports, and other
+    report types remain out of scope.
 servers:
   - url: http://localhost:3001/api/v1
     description: Local development URL
@@ -41,7 +43,7 @@ paths:
             format: date
       responses:
         "200":
-          description: Aggregate counts for closed sessions in the selected range
+          description: Aggregate and per-day counts for closed sessions in the selected range
           content:
             application/json:
               schema:
@@ -79,7 +81,7 @@ components:
     AttendanceReport:
       type: object
       additionalProperties: false
-      required: [fromDate, toDate, totalSessions, totalRecords, statusCounts]
+      required: [fromDate, toDate, totalSessions, totalRecords, statusCounts, dailyBreakdown]
       properties:
         fromDate:
           type: string
@@ -94,5 +96,26 @@ components:
           type: integer
           minimum: 0
           description: Sum of the attendance status counts.
+        statusCounts:
+          $ref: "#/components/schemas/AttendanceStatusCounts"
+        dailyBreakdown:
+          type: array
+          description: Chronological daily aggregates for dates with closed sessions.
+          items:
+            $ref: "#/components/schemas/DailyAttendanceBreakdown"
+    DailyAttendanceBreakdown:
+      type: object
+      additionalProperties: false
+      required: [date, totalSessions, totalRecords, statusCounts]
+      properties:
+        date:
+          type: string
+          format: date
+        totalSessions:
+          type: integer
+          minimum: 1
+        totalRecords:
+          type: integer
+          minimum: 0
         statusCounts:
           $ref: "#/components/schemas/AttendanceStatusCounts"

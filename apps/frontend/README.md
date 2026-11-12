@@ -33,14 +33,15 @@ Open [http://localhost:3000](http://localhost:3000).
 - `/dashboard/analytics` — Academic and attendance analytics
 - `/dashboard/reports` — Academic reports
 - `/dashboard/settings` — School and notification settings
-- `/dashboard/teacher`, `/dashboard/accountant`, `/dashboard/parent`, and `/dashboard/student` — Role-focused portal dashboards, available to the matching demo role
+- `/dashboard/teacher`, `/dashboard/accountant`, `/dashboard/parent`, and `/dashboard/student` — Role-focused workspaces, available to the matching role
 
 ## Role dashboard experiences
 
 - **Super Admin** — network-wide enrollment, school portfolio, onboarding notices, and platform activity.
 - **School Admin** — school operations, attendance follow-up, today’s attendance, fee collection, enrollment requests, and upcoming notices.
 - **Principal** — classroom activity, attendance trends, academic reports, and leadership priorities.
-- **Teacher, Accountant, Parent, and Student** — focused teaching, finance, family, and learning workspaces.
+- **Teacher** — focused teaching workspace; API mode shows assigned classes and attendance-session status.
+- **Accountant, Parent, and Student** — focused finance, family, and learning workspaces in mock mode.
 
 The sidebar profile stays visible at the lower-left on desktop and shows the signed-in user and role. Open it to view the account email, workspace settings (where available), or sign out.
 
@@ -80,7 +81,11 @@ The auth adapter uses:
 - `GET /auth/schools`
 - `POST /auth/active-school`
 
-API mode currently integrates active-school profile settings, academic years, classes and sections, student list/detail/create, and attendance sessions. Other dashboard domains are not implemented by the backend yet; API mode surfaces those errors rather than falling back to preview data.
+API mode currently integrates active-school profile settings, academic years, classes and sections, student list/detail/create, attendance sessions, the School Admin current-count dashboard, the Principal daily attendance snapshot, and the Teacher assigned-class attendance dashboard. Other dashboard domains are not implemented by the backend yet; API mode surfaces those errors rather than falling back to preview data.
+
+The Principal snapshot requires a membership explicitly assigned the `PRINCIPAL` role, which receives the separate `dashboard.principal.read` permission. The migration and seed create the role and permission grant but do not assign an existing user to that role.
+
+The Teacher dashboard requires an explicitly assigned `TEACHER` workspace role and the separate `dashboard.teacher.read` permission. It also requires exactly one active staff profile linked to the authenticated user in the active school; the migration and seed do not assign the Teacher role to an existing membership.
 
 Successful endpoints return JSON matching the types in `src/types/`. The HTTP client includes credentials so the auth API can set an `HttpOnly`, `Secure`, `SameSite` session cookie; configure CORS and CSRF accordingly when the API is on another origin. Attendance uses the school's timezone to choose its default calendar date. Existing attendance marks are read-only; corrections are deferred. Production auth must be implemented and enforced by a trusted server/API, not the browser mock.
 

@@ -38,13 +38,46 @@ export type SchoolEvent = {
   type: "Academic" | "School" | "Meeting";
 };
 
+export type Announcement = {
+  id: string;
+  title: string;
+  body: string;
+  status: "DRAFT" | "PUBLISHED";
+  publishedAt: string | null;
+  createdAt: string;
+};
+
+export type CreateAnnouncementInput = {
+  title: string;
+  body: string;
+};
+
 export type SchoolOverview = {
   role: SchoolRole;
   schoolName: string;
+  localDate?: string;
   metrics: DashboardMetric[];
   enrollment: EnrollmentPoint[];
   pendingApprovals: PendingApproval[];
   upcomingEvents: SchoolEvent[];
+};
+
+export type TeacherDashboard = {
+  schoolId: string;
+  schoolName: string;
+  localDate: string;
+  assignments: TeacherDashboardAssignment[];
+};
+
+export type TeacherDashboardAssignment = {
+  id: string;
+  classId: string;
+  className: string;
+  sectionId: string;
+  sectionName: string;
+  subject: string | null;
+  sessionStatus: "OPEN" | "CLOSED" | null;
+  unmarkedCount: number | null;
 };
 
 export type Student = {
@@ -163,6 +196,12 @@ export type AttendanceReport = {
   totalSessions: number;
   totalRecords: number;
   statusCounts: Record<AttendanceSessionRecord["status"], number>;
+  dailyBreakdown: {
+    date: string;
+    totalSessions: number;
+    totalRecords: number;
+    statusCounts: Record<AttendanceSessionRecord["status"], number>;
+  }[];
 };
 
 export type AttendanceRosterStudent = {
@@ -186,8 +225,25 @@ export type StaffMember = {
   email: string;
   position: string;
   department: string;
-  status: "Active" | "On leave";
+  status: "Active" | "Inactive" | "On leave";
+  employeeCode?: string | null;
+  firstName?: string;
+  lastName?: string | null;
+  phone?: string | null;
 };
+
+export type CreateStaffInput = {
+  employeeCode: string;
+  firstName: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  designation?: string;
+  department?: string;
+  accountEmail?: string;
+};
+
+export type UpdateStaffInput = Partial<Omit<CreateStaffInput, "accountEmail">>;
 
 export type Classroom = {
   id: string;
@@ -226,6 +282,14 @@ export type School = {
   students: number;
   staff: number;
   status: "Active" | "Setup in progress";
+};
+
+export type PlatformSchool = {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  createdAt: string;
 };
 
 export type AttendanceRecord = {

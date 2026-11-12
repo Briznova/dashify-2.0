@@ -54,6 +54,25 @@ vi.mock("@/components/school-dashboard", async () => {
   };
 });
 
+vi.mock("@/components/teacher-dashboard", async () => {
+  const React = await import("react");
+  return {
+    TeacherDashboardView: ({ userName }: { userName: string }) =>
+      React.createElement("div", {
+        "data-testid": "teacher-workspace",
+        "data-user-name": userName,
+      }),
+  };
+});
+
+vi.mock("@/components/platform-schools-directory", async () => {
+  const React = await import("react");
+  return {
+    PlatformSchoolsDirectory: () =>
+      React.createElement("div", { "data-testid": "platform-schools" }),
+  };
+});
+
 import { DashboardHome } from "@/components/dashboard-home";
 
 const roles: UserRole[] = [
@@ -81,7 +100,7 @@ function session(role: UserRole): AuthSession {
       role === "super_admin" ? null : { id: "school-1", name: "North School" },
     workspaceRoles: [role],
     activeWorkspaceRole: role,
-    permissionKeys: [],
+    permissionKeys: role === "super_admin" ? ["platform.schools.read"] : [],
   };
 }
 
@@ -121,7 +140,7 @@ describe("dashboard home composition", () => {
     },
   );
 
-  it("does not render mock dashboard data in API mode before an aggregate exists", () => {
+  it("renders the school-admin dashboard in API mode", () => {
     mocks.isApiMode = true;
     mocks.useAuthSession.mockReturnValue({
       session: session("school_admin"),
@@ -132,10 +151,81 @@ describe("dashboard home composition", () => {
 
     render(<DashboardHome />);
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "dashboard data is not connected yet",
+    expect(screen.getByTestId("school-workspace")).toHaveAttribute(
+      "data-role",
+      "school_admin",
     );
+    expect(screen.queryByTestId("portal-workspace")).not.toBeInTheDocument();
+  });
+
+  it("renders the principal dashboard in API mode", () => {
+    mocks.isApiMode = true;
+    mocks.useAuthSession.mockReturnValue({
+      session: session("principal"),
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(<DashboardHome />);
+
+    expect(screen.getByTestId("school-workspace")).toHaveAttribute(
+      "data-role",
+      "principal",
+    );
+    expect(screen.queryByTestId("portal-workspace")).not.toBeInTheDocument();
+  });
+
+  it("renders the teacher dashboard in API mode", () => {
+    mocks.isApiMode = true;
+    mocks.useAuthSession.mockReturnValue({
+      session: session("teacher"),
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(<DashboardHome />);
+
+    expect(screen.getByTestId("teacher-workspace")).toHaveAttribute(
+      "data-user-name",
+      "Avery Johnson",
+    );
+    expect(screen.queryByTestId("portal-workspace")).not.toBeInTheDocument();
+  });
+
+  it("renders the platform school directory in API mode", () => {
+    mocks.isApiMode = true;
+    mocks.useAuthSession.mockReturnValue({
+      session: session("super_admin"),
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(<DashboardHome />);
+
+    expect(screen.getByTestId("platform-schools")).toBeInTheDocument();
     expect(screen.queryByTestId("school-workspace")).not.toBeInTheDocument();
     expect(screen.queryByTestId("portal-workspace")).not.toBeInTheDocument();
+  });
+
+  it("does not render the platform directory without its server permission", () => {
+    mocks.isApiMode = true;
+    const platformSession = session("super_admin");
+    platformSession.permissionKeys = [];
+    mocks.useAuthSession.mockReturnValue({
+      session: platformSession,
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(<DashboardHome />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This platform session does not have school-directory access.",
+    );
+    expect(screen.queryByTestId("platform-schools")).not.toBeInTheDocument();
   });
 });

@@ -9,13 +9,25 @@ import {
 
 export class CreateStaffDto {
   @ApiPropertyOptional({
-    description: "Optional existing user record to associate with this staff profile.",
+    description:
+      "Optional existing user record to associate with this staff profile.",
     format: "uuid",
     example: "11111111-1111-4111-8111-111111111111",
   })
   @IsOptional()
   @IsUUID()
   userId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Email address of an existing login account to link and grant the Teacher role in this school.",
+    example: "teacher@example.test",
+    maxLength: 160,
+  })
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(160)
+  accountEmail?: string;
 
   @ApiProperty({
     description: "Employee code used in the school roster.",
@@ -46,7 +58,8 @@ export class CreateStaffDto {
   lastName?: string;
 
   @ApiPropertyOptional({
-    description: "Staff member email address if it is separate from the linked user account.",
+    description:
+      "Staff member email address if it is separate from the linked user account.",
     example: "priya.nair@dashify.test",
     maxLength: 160,
   })

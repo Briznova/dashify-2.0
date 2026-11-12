@@ -1,0 +1,392 @@
+openapi: 3.1.0
+info:
+  title: Dashify Staff API
+  version: 1.0.0
+  description: School-scoped staff profiles, existing-account linkage, and teacher assignments.
+servers:
+  - url: /api/v1
+security:
+  - accessCookie: []
+paths:
+  /staff:
+    get:
+      operationId: listStaff
+      summary: List active staff profiles in the active school
+      x-required-permission: staff.read
+      x-tenant-scope: authenticated active school
+      responses:
+        "200":
+          description: Active-school staff profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createStaff
+      summary: Create a staff profile and optionally link an existing teacher account
+      x-required-permission: staff.manage
+      x-tenant-scope: authenticated active school
+      parameters:
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      description: >
+        Linking by accountEmail requires that the user already exists. The operation
+        creates a membership when none exists and grants only this school's Teacher
+        role. Existing suspended, revoked, or invited memberships are rejected. It
+        does not create a login, invite a user, or set credentials. Do not send both
+        userId and accountEmail.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStaff"
+      responses:
+        "201":
+          description: Created staff profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Existing account was not found
+        "409":
+          description: Duplicate employee code, account link, or inactive membership
+  /staff/{id}:
+    get:
+      operationId: getStaff
+      summary: Get a staff profile in the active school
+      x-required-permission: staff.read
+      x-tenant-scope: authenticated active school
+      parameters:
+        - $ref: "#/components/parameters/StaffId"
+      responses:
+        "200":
+          description: Active-school staff profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Staff profile was not found in the active school
+    patch:
+      operationId: updateStaff
+      summary: Update an active staff profile
+      x-required-permission: staff.manage
+      x-tenant-scope: authenticated active school
+      parameters:
+        - $ref: "#/components/parameters/StaffId"
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStaff"
+      responses:
+        "200":
+          description: Updated staff profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Staff profile was not found in the active school
+        "409":
+          description: Employee code is already in use in this school
+  /staff/{id}/deactivate:
+    post:
+      operationId: deactivateStaff
+      summary: Deactivate a staff profile and revoke its Teacher access
+      x-required-permission: staff.manage
+      x-tenant-scope: authenticated active school
+      parameters:
+        - $ref: "#/components/parameters/StaffId"
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Deactivated staff profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Active staff profile was not found in the active school
+  /teacher-assignments:
+    get:
+      operationId: listTeacherAssignments
+      summary: List active teacher assignments in the active school
+      x-required-permission: staff.read
+      x-tenant-scope: authenticated active school
+      responses:
+        "200":
+          description: Active-school teacher assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeacherAssignment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: assignTeacher
+      summary: Assign a staff profile to a class or section
+      x-required-permission: staff.manage
+      x-tenant-scope: authenticated active school
+      parameters:
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTeacherAssignment"
+      responses:
+        "201":
+          description: Created or reactivated assignment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherAssignment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Staff member, class, or section was not found in the active school
+components:
+  securitySchemes:
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: dashify_access
+  parameters:
+    OriginHeader:
+      name: Origin
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uri
+    CsrfHeader:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+    StaffId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    CreateStaff:
+      type: object
+      required: [employeeCode, firstName]
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: Existing user ID; links the user and grants only the Teacher role; mutually exclusive with accountEmail.
+        accountEmail:
+          type: string
+          format: email
+          maxLength: 160
+          description: Existing user's email; links the user and grants only the Teacher role.
+        employeeCode:
+          type: string
+          maxLength: 20
+        firstName:
+          type: string
+          maxLength: 80
+        lastName:
+          type: string
+          maxLength: 80
+        email:
+          type: string
+          format: email
+          maxLength: 160
+        phone:
+          type: string
+          maxLength: 30
+        designation:
+          type: string
+          maxLength: 80
+        department:
+          type: string
+          maxLength: 80
+    UpdateStaff:
+      type: object
+      minProperties: 1
+      properties:
+        employeeCode:
+          type: string
+          maxLength: 20
+        firstName:
+          type: string
+          maxLength: 80
+        lastName:
+          type: string
+          maxLength: 80
+        email:
+          type: string
+          format: email
+          maxLength: 160
+        phone:
+          type: string
+          maxLength: 30
+        designation:
+          type: string
+          maxLength: 80
+        department:
+          type: string
+          maxLength: 80
+    StaffProfile:
+      type: object
+      required: [id, schoolId, userId, employeeCode, firstName, isActive]
+      properties:
+        id:
+          type: string
+          format: uuid
+        schoolId:
+          type: string
+          format: uuid
+        userId:
+          type: [string, "null"]
+          format: uuid
+        employeeCode:
+          type: [string, "null"]
+        firstName:
+          type: [string, "null"]
+        lastName:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        phone:
+          type: [string, "null"]
+        designation:
+          type: [string, "null"]
+        department:
+          type: [string, "null"]
+        isActive:
+          type: boolean
+        user:
+          oneOf:
+            - type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                email:
+                  type: string
+                  format: email
+                firstName:
+                  type: string
+                lastName:
+                  type: [string, "null"]
+            - type: "null"
+    CreateTeacherAssignment:
+      type: object
+      required: [staffId, classId]
+      properties:
+        staffId:
+          type: string
+          format: uuid
+        classId:
+          type: string
+          format: uuid
+        sectionId:
+          type: string
+          format: uuid
+        subject:
+          type: string
+    TeacherAssignment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        schoolId:
+          type: string
+          format: uuid
+        staffId:
+          type: string
+          format: uuid
+        classId:
+          type: string
+          format: uuid
+        sectionId:
+          type: [string, "null"]
+          format: uuid
+        subject:
+          type: [string, "null"]
+        isActive:
+          type: boolean
+    Error:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        error:
+          type: string
+  responses:
+    BadRequest:
+      description: Invalid request data
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Missing required permission
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

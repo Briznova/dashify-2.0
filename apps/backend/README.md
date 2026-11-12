@@ -49,6 +49,8 @@ Browser authentication uses `dashify_access`, `dashify_refresh`, and `dashify_cs
 
 The seed requires `SEED_ADMIN_EMAIL` and a locally configured `SEED_ADMIN_PASSWORD` of at least 12 characters. Choose credentials for a disposable local database; do not reuse them outside development.
 
+To bootstrap a separate platform-only Super Admin in a local database, optionally set `SEED_PLATFORM_ADMIN_EMAIL` and `SEED_PLATFORM_ADMIN_PASSWORD` (minimum 12 characters) before running the seed. The account must not have an active school membership. This grant provides read-only school directory access; it does not enable school switching, school data access, or school lifecycle changes. Do not commit credentials. To revoke access, set `revoked_at` on that user's `platform_admin_grants` row; active platform requests then fail closed.
+
 ## Authentication flow
 
 1. `POST /api/v1/auth/login` with email/password.

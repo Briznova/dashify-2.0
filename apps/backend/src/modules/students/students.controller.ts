@@ -111,7 +111,7 @@ export class StudentsController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateStudentDto,
   ) {
-    return this.students.update(this.school(req), id, dto);
+    return this.students.update(this.school(req), req.user.id, id, dto);
   }
 
   @Post(":id/archive")

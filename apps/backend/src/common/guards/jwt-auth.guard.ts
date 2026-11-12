@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
+import { AuthScope } from "@prisma/client";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { AuthenticatedRequest } from "../interfaces/authenticated-request";
 import { ACCESS_COOKIE } from "../../modules/auth/auth-cookies";
@@ -31,6 +32,7 @@ export class JwtAuthGuard implements CanActivate {
       sub: string;
       email: string;
       sid?: string;
+      scope?: string;
       schoolId?: string;
       membershipId?: string;
       workspaceRole?: string;
@@ -41,6 +43,7 @@ export class JwtAuthGuard implements CanActivate {
         sub: string;
         email: string;
         sid?: string;
+        scope?: string;
         schoolId?: string;
         membershipId?: string;
         workspaceRole?: string;
@@ -55,17 +58,70 @@ export class JwtAuthGuard implements CanActivate {
     if (payload.sid) {
       const activeSession = await this.prisma.refreshToken.findFirst({
         where: {
+          userId: payload.sub,
           sessionId: payload.sid,
           revokedAt: null,
           expiresAt: { gt: new Date() },
         },
-        select: { id: true },
+        select: { id: true, scope: true },
       });
-      if (!activeSession) throw new UnauthorizedException();
+      const expectedScope =
+        payload.scope === "platform"
+          ? AuthScope.PLATFORM
+          : payload.scope === "school"
+            ? AuthScope.SCHOOL
+            : payload.scope === "school-selection"
+              ? AuthScope.SCHOOL_SELECTION
+              : null;
+      if (!activeSession || !expectedScope || activeSession.scope !== expectedScope) {
+        throw new UnauthorizedException();
+      }
     }
 
+    if (payload.scope === "platform") {
+      if (
+        !payload.sid ||
+        payload.schoolId ||
+        payload.membershipId ||
+        payload.workspaceRole
+      ) {
+        throw new UnauthorizedException();
+      }
+      const platformGrant = await this.prisma.platformAdminGrant.findFirst({
+        where: {
+          userId: payload.sub,
+          revokedAt: null,
+          user: { is: { isActive: true } },
+        },
+        select: { id: true },
+      });
+      if (!platformGrant) throw new UnauthorizedException();
+      request.user = {
+        id: payload.sub,
+        email: payload.email,
+        sessionId: payload.sid,
+        scope: "platform",
+        permissions: ["platform.schools.read"],
+      };
+      return true;
+    }
+
+    const platformGrant = await this.prisma.platformAdminGrant.findFirst({
+      where: {
+        userId: payload.sub,
+        revokedAt: null,
+        user: { is: { isActive: true } },
+      },
+      select: { id: true },
+    });
+    if (platformGrant) throw new UnauthorizedException();
+
     if (payload.schoolId || payload.membershipId) {
-      if (!payload.schoolId || !payload.membershipId) {
+      if (
+        payload.scope !== "school" ||
+        !payload.schoolId ||
+        !payload.membershipId
+      ) {
         throw new UnauthorizedException();
       }
       const activeMembership = await this.prisma.schoolMembership.findFirst({
@@ -107,6 +163,7 @@ export class JwtAuthGuard implements CanActivate {
         id: payload.sub,
         email: payload.email,
         sessionId: payload.sid,
+        scope: "school",
         activeSchoolId: payload.schoolId,
         membershipId: payload.membershipId,
         activeWorkspaceRole: payload.workspaceRole,
@@ -121,10 +178,17 @@ export class JwtAuthGuard implements CanActivate {
       return true;
     }
 
+    if (
+      payload.scope !== "school-selection" ||
+      payload.workspaceRole
+    ) {
+      throw new UnauthorizedException();
+    }
     request.user = {
       id: payload.sub,
       email: payload.email,
       sessionId: payload.sid,
+      scope: "school-selection",
       activeSchoolId: payload.schoolId,
       membershipId: payload.membershipId,
       activeWorkspaceRole: payload.workspaceRole,

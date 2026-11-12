@@ -1,6 +1,7 @@
 import { ForbiddenException, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
+import { AuthScope } from "@prisma/client";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { AuthService } from "./auth.service";
 import * as argon2 from "argon2";
@@ -46,7 +47,12 @@ describe("AuthService browser sessions", () => {
 
   let prismaMock: {
     user: { findUnique: jest.Mock };
-    schoolMembership: { findMany: jest.Mock; findFirst: jest.Mock };
+    platformAdminGrant: { findFirst: jest.Mock };
+    schoolMembership: {
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      count: jest.Mock;
+    };
     refreshToken: {
       create: jest.Mock;
       findFirst: jest.Mock;
@@ -59,9 +65,11 @@ describe("AuthService browser sessions", () => {
   beforeEach(() => {
     prismaMock = {
       user: { findUnique: jest.fn() },
+      platformAdminGrant: { findFirst: jest.fn().mockResolvedValue(null) },
       schoolMembership: {
         findMany: jest.fn().mockResolvedValue([membership]),
         findFirst: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
       },
       refreshToken: {
         create: jest.fn().mockResolvedValue({ id: "refresh-1" }),
@@ -145,6 +153,85 @@ describe("AuthService browser sessions", () => {
     expect(prismaMock.refreshToken.create).not.toHaveBeenCalled();
   });
 
+  it("creates a dedicated platform session with no school memberships", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(user);
+    prismaMock.platformAdminGrant.findFirst.mockResolvedValue({ id: "grant-1" });
+
+    const result = await auth.login({
+      email: user.email,
+      password: "example-password",
+    });
+
+    expect(result.body).toMatchObject({
+      scope: "platform",
+      memberships: [],
+      activeSchool: null,
+      workspaceRoles: [],
+      activeWorkspaceRole: null,
+      permissionKeys: ["platform.schools.read"],
+    });
+    expect(prismaMock.refreshToken.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ scope: AuthScope.PLATFORM }),
+    });
+    expect(prismaMock.schoolMembership.findMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects platform login when the account has an active school membership", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(user);
+    prismaMock.platformAdminGrant.findFirst.mockResolvedValue({ id: "grant-1" });
+    prismaMock.schoolMembership.count.mockResolvedValue(1);
+
+    await expect(
+      auth.login({ email: user.email, password: "example-password" }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prismaMock.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it("restores platform sessions without querying or returning school memberships", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(user);
+    prismaMock.platformAdminGrant.findFirst.mockResolvedValue({ id: "grant-1" });
+
+    const result = await auth.currentSession(user.id, {
+      scope: "platform",
+      activeSchoolId: null,
+      membershipId: null,
+      activeWorkspaceRole: null,
+      permissionKeys: [],
+    });
+
+    expect(result).toMatchObject({
+      scope: "platform",
+      memberships: [],
+      activeSchool: null,
+      permissionKeys: ["platform.schools.read"],
+    });
+    expect(prismaMock.schoolMembership.findMany).not.toHaveBeenCalled();
+  });
+
+  it("revokes a platform refresh session after its grant is revoked", async () => {
+    prismaMock.refreshToken.findFirst.mockResolvedValue({
+      id: "refresh-1",
+      userId: user.id,
+      sessionId: "platform-session-1",
+      scope: AuthScope.PLATFORM,
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+      activeSchoolId: null,
+      membershipId: null,
+      activeWorkspaceRole: null,
+    });
+    prismaMock.user.findUnique.mockResolvedValue(user);
+    prismaMock.platformAdminGrant.findFirst.mockResolvedValue(null);
+
+    await expect(auth.refresh("platform-refresh-token")).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(prismaMock.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { sessionId: "platform-session-1", revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+  });
+
   it("does not expose a platform role as a school workspace role", async () => {
     prismaMock.user.findUnique.mockResolvedValue(user);
     prismaMock.schoolMembership.findMany.mockResolvedValue([
@@ -210,6 +297,7 @@ describe("AuthService browser sessions", () => {
       id: "refresh-1",
       userId: user.id,
       sessionId: "session-1",
+      scope: AuthScope.SCHOOL,
       revokedAt: null,
       expiresAt: new Date(Date.now() - 60_000),
       activeSchoolId: null,
@@ -231,6 +319,7 @@ describe("AuthService browser sessions", () => {
       id: "refresh-1",
       userId: user.id,
       sessionId: "session-1",
+      scope: AuthScope.SCHOOL,
       revokedAt: null,
       expiresAt: new Date(Date.now() + 60_000),
       activeSchoolId: membership.schoolId,

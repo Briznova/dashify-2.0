@@ -110,6 +110,7 @@ export class AuthController {
   @ApiOkResponse({ type: AuthSessionResponseDto })
   me(@Req() request: AuthenticatedRequest) {
     return this.auth.currentSession(request.user.id, {
+      scope: request.user.scope ?? "school-selection",
       activeSchoolId: request.user.activeSchoolId ?? null,
       membershipId: request.user.membershipId ?? null,
       activeWorkspaceRole: request.user.activeWorkspaceRole ?? null,
@@ -124,7 +125,7 @@ export class AuthController {
   @ApiOperation({ summary: "List active school memberships for the user" })
   @ApiOkResponse({ type: [AuthMembershipResponseDto] })
   schools(@Req() request: AuthenticatedRequest) {
-    return this.auth.listSchools(request.user.id);
+    return this.auth.listSchools(request.user.id, request.user.scope);
   }
 
   @ApiCookieAuth("accessCookie")

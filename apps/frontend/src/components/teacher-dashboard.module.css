@@ -1,0 +1,55 @@
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 13px;
+  margin-bottom: 16px;
+}
+
+.assignmentList {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assignment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid #f0f1f5;
+}
+
+.assignmentDetails,
+.attendanceStatus {
+  display: grid;
+  gap: 5px;
+}
+
+.assignmentDetails strong {
+  color: #30364e;
+  font-size: 14px;
+}
+
+.assignmentDetails span,
+.attendanceStatus > span {
+  color: #8b92a3;
+  font-size: 12px;
+}
+
+.attendanceStatus {
+  justify-items: end;
+}
+
+.emptyState {
+  margin: 0;
+  color: #8b92a3;
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  .assignment {
+    align-items: flex-start;
+  }
+}

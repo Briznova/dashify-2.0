@@ -47,7 +47,7 @@
 
 .metricsGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 13px;
   margin-bottom: 16px;
 }
@@ -546,6 +546,25 @@
   margin: 0 0 12px;
   color: #646c82;
   font-size: 13px;
+}
+
+.reportResultActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.reportResultActions .reportSummary {
+  margin: 0;
+}
+
+.reportExportNote {
+  margin: 0 0 12px;
+  color: #81889a;
+  font-size: 12px;
 }
 
 .reportError {

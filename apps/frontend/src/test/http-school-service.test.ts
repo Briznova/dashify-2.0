@@ -109,6 +109,63 @@ describe("HttpSchoolService.getClassrooms", () => {
     );
   });
 
+  describe("HttpSchoolService.getPlatformSchools", () => {
+    it("requests and returns only approved school-directory metadata", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            {
+              id: "school-1",
+              name: "Example School",
+              code: "EXAMPLE",
+              isActive: true,
+              createdAt: "2026-04-03T08:00:00.000Z",
+              principal: "Unexpected field",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const service = new HttpSchoolService(
+        new ApiClient("https://dashify.test/api/v1"),
+      );
+
+      await expect(service.getPlatformSchools()).resolves.toEqual([
+        {
+          id: "school-1",
+          name: "Example School",
+          code: "EXAMPLE",
+          isActive: true,
+          createdAt: "2026-04-03T08:00:00.000Z",
+        },
+      ]);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://dashify.test/api/v1/platform/schools",
+        expect.objectContaining({ credentials: "include" }),
+      );
+    });
+
+    it("rejects malformed school-directory data", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify([{ id: "school-1", name: "Example", isActive: true }]),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      );
+      const service = new HttpSchoolService(
+        new ApiClient("https://dashify.test/api/v1"),
+      );
+
+      await expect(service.getPlatformSchools()).rejects.toMatchObject({
+        status: 502,
+      });
+    });
+  });
+
   describe("HttpSchoolService.getOverview", () => {
     it("requests and maps only the school-admin current-count contract", async () => {
       const fetchMock = vi.fn().mockResolvedValue(
@@ -146,7 +203,47 @@ describe("HttpSchoolService.getClassrooms", () => {
       );
     });
 
-    it.each(["super_admin", "principal"] as const)(
+    it("requests and maps the principal daily attendance contract", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({
+          schoolId: "44009a3e-5693-4f11-9891-b5e34f4d02c6",
+          schoolName: "Northstar School",
+          localDate: "2026-04-03",
+          presentCount: 12,
+          absentCount: 2,
+          lateCount: 1,
+          excusedCount: 1,
+          unmarkedCount: 3,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+
+      await expect(service.getOverview("principal")).resolves.toEqual({
+        role: "principal",
+        schoolName: "Northstar School",
+        localDate: "2026-04-03",
+        metrics: [
+          { label: "Present", value: "12", icon: "check", tone: "green" },
+          { label: "Absent", value: "2", icon: "alert", tone: "orange" },
+          { label: "Late", value: "1", icon: "clock", tone: "violet" },
+          { label: "Excused", value: "1", icon: "info", tone: "blue" },
+          { label: "Unmarked", value: "3", icon: "calendarCheck", tone: "orange" },
+        ],
+        enrollment: [],
+        pendingApprovals: [],
+        upcomingEvents: [],
+      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://dashify.test/api/v1/dashboard/principal",
+        expect.objectContaining({ credentials: "include" }),
+      );
+    });
+
+    it.each(["super_admin"] as const)(
       "does not request unapproved dashboard metrics for %s",
       async (role) => {
         const fetchMock = vi.fn();
@@ -160,6 +257,28 @@ describe("HttpSchoolService.getClassrooms", () => {
         expect(fetchMock).not.toHaveBeenCalled();
       },
     );
+
+    it("rejects invalid principal local dates and aggregate values", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({
+          schoolId: "44009a3e-5693-4f11-9891-b5e34f4d02c6",
+          schoolName: "Northstar School",
+          localDate: "2026-02-30",
+          presentCount: 12,
+          absentCount: 2,
+          lateCount: 1,
+          excusedCount: 1,
+          unmarkedCount: 3,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+
+      await expect(service.getOverview("principal")).rejects.toBeInstanceOf(ApiError);
+    });
 
     it("rejects malformed or negative aggregate counts", async () => {
       const fetchMock = vi.fn().mockResolvedValue(
@@ -179,6 +298,116 @@ describe("HttpSchoolService.getClassrooms", () => {
       const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
 
       await expect(service.getOverview("school_admin")).rejects.toBeInstanceOf(ApiError);
+    });
+
+  });
+
+  describe("HttpSchoolService.getTeacherDashboard", () => {
+    it("requests and validates the assignment-scoped teacher contract", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            schoolId: "44009a3e-5693-4f11-9891-b5e34f4d02c6",
+            schoolName: "Northstar School",
+            localDate: "2026-04-03",
+            assignments: [
+              {
+                classId: "22222222-2222-4222-8222-222222222222",
+                className: "Grade 8",
+                sectionId: "034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
+                sectionName: "Section A",
+                subject: "Mathematics",
+                sessionStatus: "OPEN",
+                unmarkedCount: 3,
+              },
+              {
+                classId: "33333333-3333-4333-8333-333333333333",
+                className: "Grade 9",
+                sectionId: "044b0bc2-cdc2-43cf-bf2a-b10ad7583858",
+                sectionName: "Section B",
+                subject: null,
+                sessionStatus: null,
+                unmarkedCount: null,
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const service = new HttpSchoolService(
+        new ApiClient("https://dashify.test/api/v1"),
+      );
+
+      await expect(service.getTeacherDashboard()).resolves.toEqual({
+        schoolId: "44009a3e-5693-4f11-9891-b5e34f4d02c6",
+        schoolName: "Northstar School",
+        localDate: "2026-04-03",
+        assignments: [
+          {
+            id: "22222222-2222-4222-8222-222222222222-034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
+            classId: "22222222-2222-4222-8222-222222222222",
+            className: "Grade 8",
+            sectionId: "034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
+            sectionName: "Section A",
+            subject: "Mathematics",
+            sessionStatus: "OPEN",
+            unmarkedCount: 3,
+          },
+          {
+            id: "33333333-3333-4333-8333-333333333333-044b0bc2-cdc2-43cf-bf2a-b10ad7583858",
+            classId: "33333333-3333-4333-8333-333333333333",
+            className: "Grade 9",
+            sectionId: "044b0bc2-cdc2-43cf-bf2a-b10ad7583858",
+            sectionName: "Section B",
+            subject: null,
+            sessionStatus: null,
+            unmarkedCount: null,
+          },
+        ],
+      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://dashify.test/api/v1/dashboard/teacher",
+        expect.objectContaining({ credentials: "include" }),
+      );
+    });
+
+    it("rejects a fabricated zero when an assigned section has no session", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            schoolId: "44009a3e-5693-4f11-9891-b5e34f4d02c6",
+            schoolName: "Northstar School",
+            localDate: "2026-04-03",
+            assignments: [
+              {
+                classId: "22222222-2222-4222-8222-222222222222",
+                className: "Grade 8",
+                sectionId: "034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
+                sectionName: "Section A",
+                subject: null,
+                sessionStatus: null,
+                unmarkedCount: 0,
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const service = new HttpSchoolService(
+        new ApiClient("https://dashify.test/api/v1"),
+      );
+
+      await expect(service.getTeacherDashboard()).rejects.toBeInstanceOf(
+        ApiError,
+      );
     });
   });
 
@@ -419,11 +648,106 @@ describe("HttpSchoolService.getClassrooms", () => {
         position: "Math Teacher",
         department: "Mathematics",
         status: "Active",
+        employeeCode: "EMP-101",
+        firstName: "Mia",
+        lastName: "Robinson",
+        phone: "+1-555-010-7788",
       },
     ]);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://dashify.test/api/v1/staff",
       expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("creates a staff profile linked to an existing Teacher account", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "staff-1",
+          firstName: "Mia",
+          lastName: "Robinson",
+          email: "mia@example.test",
+          employeeCode: "EMP-101",
+          designation: "Teacher",
+          department: "Mathematics",
+          isActive: true,
+        }),
+        { status: 201, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+
+    await expect(
+      service.createStaff({
+        employeeCode: "EMP-101",
+        firstName: "Mia",
+        accountEmail: "mia@example.test",
+      }),
+    ).resolves.toMatchObject({
+      id: "staff-1",
+      name: "Mia Robinson",
+      email: "mia@example.test",
+      position: "Teacher",
+      status: "Active",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://dashify.test/api/v1/staff",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          employeeCode: "EMP-101",
+          firstName: "Mia",
+          accountEmail: "mia@example.test",
+        }),
+      }),
+    );
+  });
+
+  it("updates and deactivates staff profiles through the backend routes", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "staff-1",
+            firstName: "Mia",
+            lastName: "Robinson",
+            email: "mia@example.test",
+            employeeCode: "EMP-101",
+            designation: "Senior Teacher",
+            department: "Mathematics",
+            isActive: true,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "staff-1", isActive: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+
+    await expect(
+      service.updateStaff("staff-1", { designation: "Senior Teacher" }),
+    ).resolves.toMatchObject({ position: "Senior Teacher" });
+    await expect(service.deactivateStaff("staff-1")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://dashify.test/api/v1/staff/staff-1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ designation: "Senior Teacher" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://dashify.test/api/v1/staff/staff-1/deactivate",
+      expect.objectContaining({ method: "POST" }),
     );
   });
 

@@ -20,6 +20,19 @@ describe("HttpSchoolService.getAttendanceReport", () => {
       LATE: 2,
       EXCUSED: 1,
     },
+    dailyBreakdown: [
+      {
+        date: "2026-04-01",
+        totalSessions: 3,
+        totalRecords: 24,
+        statusCounts: {
+          PRESENT: 18,
+          ABSENT: 3,
+          LATE: 2,
+          EXCUSED: 1,
+        },
+      },
+    ],
   };
 
   it("requests the selected date range and validates the aggregate response", async () => {
@@ -47,6 +60,34 @@ describe("HttpSchoolService.getAttendanceReport", () => {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+
+    await expect(
+      service.getAttendanceReport(fromDate, toDate),
+    ).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("rejects a daily breakdown that does not reconcile with the report totals", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...report,
+          dailyBreakdown: [
+            {
+              date: "2026-04-01",
+              totalSessions: 2,
+              totalRecords: 24,
+              statusCounts: report.statusCounts,
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
     );
     vi.stubGlobal("fetch", fetchMock);
     const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));

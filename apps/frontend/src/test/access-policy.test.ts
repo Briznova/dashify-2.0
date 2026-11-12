@@ -55,6 +55,7 @@ const expected: Record<
       "Academics",
       "Analytics",
       "Reports",
+      "Announcements",
     ],
     settings: true,
   },
@@ -72,6 +73,7 @@ const expected: Record<
       "Academics",
       "Analytics",
       "Reports",
+      "Announcements",
     ],
     settings: true,
   },
@@ -85,6 +87,7 @@ const expected: Record<
       "Classes",
       "Attendance",
       "Academics",
+      "Announcements",
     ],
     settings: false,
   },
@@ -261,6 +264,37 @@ describe("role access policy", () => {
     ).toBe(true);
   });
 
+  it("limits platform navigation to the platform-school permission", () => {
+    expect(getRoleNavigation("super_admin", []).map((item) => item.capability))
+      .toEqual(["overview"]);
+    expect(
+      getRoleNavigation("super_admin", ["platform.schools.read"]).map(
+        (item) => item.capability,
+      ),
+    ).toEqual(["overview", "schools"]);
+    expect(
+      isDashboardRouteAllowed(
+        "/dashboard/schools",
+        "super_admin",
+        ["platform.schools.read"],
+      ),
+    ).toBe(true);
+    expect(
+      isDashboardRouteAllowed(
+        "/dashboard/students",
+        "super_admin",
+        ["platform.schools.read"],
+      ),
+    ).toBe(false);
+    expect(
+      isDashboardRouteAllowed(
+        "/dashboard/schools",
+        "school_admin",
+        ["platform.schools.read"],
+      ),
+    ).toBe(false);
+  });
+
   it("keeps the assigned workspace home reachable when its aggregate API is unavailable", () => {
     expect(
       getRoleNavigation("teacher", []).map((item) => item.capability),
@@ -271,6 +305,17 @@ describe("role access policy", () => {
     expect(
       isDashboardRouteAllowed("/dashboard/teacher/assignments", "teacher", []),
     ).toBe(false);
+  });
+
+  it("shows the Teacher teaching-day navigation only with its dashboard permission", () => {
+    expect(
+      getRoleNavigation("teacher", []).map((item) => item.capability),
+    ).not.toContain("teaching-day");
+    expect(
+      getRoleNavigation("teacher", ["dashboard.teacher.read"]).map(
+        (item) => item.capability,
+      ),
+    ).toContain("teaching-day");
   });
 
   it("exposes reports in API mode only when reports.read is granted", () => {
@@ -287,6 +332,22 @@ describe("role access policy", () => {
     expect(
       isDashboardRouteAllowed("/dashboard/reports", "school_admin", []),
     ).toBe(false);
+  });
+
+  it("exposes announcements only when announcements.read is granted", () => {
+    expect(
+      getRoleNavigation("school_admin", []).map((item) => item.capability),
+    ).not.toContain("announcements");
+    expect(
+      getRoleNavigation("school_admin", ["announcements.read"]).map(
+        (item) => item.capability,
+      ),
+    ).toContain("announcements");
+    expect(
+      getRoleNavigation("teacher", ["announcements.read"]).map(
+        (item) => item.capability,
+      ),
+    ).toContain("announcements");
   });
 
   it("requires student permissions for list, create, and edit pages", () => {

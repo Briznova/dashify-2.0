@@ -12,6 +12,7 @@ import {
   useClassrooms,
   useCreateAcademicSection,
   useCreateClassroom,
+  useDeactivateStaff,
   useSchoolOverview,
   useSchoolProfile,
   useSchoolSettings,
@@ -22,6 +23,7 @@ import {
   useStudentsPage,
   useUpdateSchoolSettings,
   useUpdateSchoolProfile,
+  useSaveStaff,
 } from "@/hooks/use-school-data";
 import { useAuthSession } from "@/hooks/use-auth";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -31,6 +33,7 @@ import { PageHeading } from "@/components/ui/page-heading";
 import { Panel } from "@/components/ui/panel";
 import { ResourceState } from "@/components/ui/resource-state";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { downloadAttendanceReportCsv } from "@/lib/attendance-report-csv";
 import { isApiMode, schoolService } from "@/services";
 import type {
   AcademicReport,
@@ -43,6 +46,8 @@ import type {
   SchoolOverview,
   SchoolRole,
   SchoolSettingsData,
+  CreateStaffInput,
+  UpdateStaffInput,
   UpdateSchoolProfileInput,
   StaffMember,
   Student,
@@ -73,7 +78,11 @@ function RoleDashboard({ sessionRole, userName }: { sessionRole: SchoolRole; use
         description={isApiMode
           ? role === "school_admin"
             ? "Current counts for active students, staff, classes, and sections."
-            : "Role-specific dashboard data is not available yet."
+            : role === "principal"
+              ? data?.localDate
+                ? `Daily attendance snapshot for ${data.localDate} (school local date).`
+                : "Daily attendance snapshot for the active school."
+              : "Role-specific dashboard data is not available yet."
           : role === "super_admin"
             ? "Monitor school workspaces, onboarding, and network-wide performance."
             : role === "principal"
@@ -88,7 +97,7 @@ function RoleDashboard({ sessionRole, userName }: { sessionRole: SchoolRole; use
               key={metric.label}
               label={metric.label}
               value={metric.value}
-              detail={metric.change ?? "Current total"}
+              detail={metric.change ?? (role === "principal" ? "Today" : "Current total")}
               trend={metric.positive === undefined
                 ? undefined
                 : metric.positive ? "positive" : "negative"}
@@ -444,13 +453,133 @@ export function StudentsDirectory() {
 
 export function StaffDirectory() {
   const resource = useStaff();
+  const { session } = useAuthSession();
+  const saveStaff = useSaveStaff();
+  const deactivateStaff = useDeactivateStaff();
+  const [editing, setEditing] = useState<StaffMember | null>(null);
+  const [employeeCode, setEmployeeCode] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [department, setDepartment] = useState("");
+  const canManage = Boolean(session?.permissionKeys.includes("staff.manage"));
+
+  function resetForm() {
+    setEditing(null);
+    setEmployeeCode("");
+    setFirstName("");
+    setLastName("");
+    setEmail("");
+    setPhone("");
+    setAccountEmail("");
+    setDesignation("");
+    setDepartment("");
+  }
+
+  function editStaff(row: StaffMember) {
+    setEditing(row);
+    setEmployeeCode(row.employeeCode ?? "");
+    setFirstName(row.firstName ?? row.name.split(" ")[0] ?? "");
+    setLastName(row.lastName ?? "");
+    setEmail(row.email);
+    setPhone(row.phone ?? "");
+    setDesignation(row.position);
+    setDepartment(row.department);
+    setAccountEmail("");
+  }
+
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const input: CreateStaffInput | UpdateStaffInput = {
+      employeeCode: employeeCode.trim() || undefined,
+      firstName: firstName.trim() || undefined,
+      lastName: lastName.trim() || undefined,
+      email: email.trim() || undefined,
+      phone: phone.trim() || undefined,
+      designation: designation.trim() || undefined,
+      department: department.trim() || undefined,
+      ...(!editing && accountEmail.trim()
+        ? { accountEmail: accountEmail.trim() }
+        : {}),
+    };
+    const saved = await saveStaff.save(editing?.id ?? null, input);
+    if (!saved) return;
+    resetForm();
+    resource.refresh();
+  }
+
+  async function handleDeactivate(row: StaffMember) {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `Deactivate ${row.name}? Their Teacher access in this school will be revoked.`,
+      )
+    ) {
+      return;
+    }
+    if (await deactivateStaff.deactivate(row.id)) resource.refresh();
+  }
+
   const columns: Column<StaffMember>[] = [
     { heading: "STAFF MEMBER", render: (row) => <span className={styles.tablePerson}><i>{row.name.split(" ").map((part) => part[0]).join("")}</i><span><strong>{row.name}</strong><small>{row.email}</small></span></span> },
     { heading: "POSITION", render: (row) => row.position },
     { heading: "DEPARTMENT", render: (row) => row.department },
     { heading: "STATUS", render: (row) => <StatusBadge>{row.status}</StatusBadge> },
+    ...(isApiMode && canManage
+      ? [{
+          heading: "ACTIONS",
+          render: (row: StaffMember) => (
+            <div className={styles.pageActions}>
+              <button type="button" className={styles.outlineButton} onClick={() => editStaff(row)}>
+                Edit
+              </button>
+              <button
+                type="button"
+                className={styles.outlineButton}
+                disabled={deactivateStaff.isPending}
+                onClick={() => void handleDeactivate(row)}
+              >
+                Deactivate
+              </button>
+            </div>
+          ),
+        }]
+      : []),
   ];
-  return <DirectoryTable title="Staff" description="View teachers and school staff across your community." rows={resource.data} columns={columns} isLoading={resource.isLoading} error={resource.error} refresh={resource.refresh} searchText={(row) => `${row.name} ${row.email} ${row.position} ${row.department}`} />;
+
+  return (
+    <>
+      {isApiMode && canManage && (
+        <div className={styles.createStructureForms}>
+          <Panel
+            title={editing ? "Edit staff profile" : "Add staff"}
+            description={editing
+              ? "Update this active-school staff profile."
+              : "Create a staff profile. You may link an existing login account as a Teacher; new accounts and invitations are not available yet."}
+          >
+            <form className={styles.createStructureForm} onSubmit={handleSave}>
+              <label>Employee code<input value={employeeCode} onChange={(event) => setEmployeeCode(event.target.value)} maxLength={20} required={!editing} /></label>
+              <label>First name<input value={firstName} onChange={(event) => setFirstName(event.target.value)} maxLength={80} required={!editing} /></label>
+              <label>Last name<input value={lastName} onChange={(event) => setLastName(event.target.value)} maxLength={80} /></label>
+              <label>Contact email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} maxLength={160} /></label>
+              <label>Phone<input value={phone} onChange={(event) => setPhone(event.target.value)} maxLength={30} /></label>
+              {!editing && <label>Existing teacher login email (optional)<input type="email" value={accountEmail} onChange={(event) => setAccountEmail(event.target.value)} maxLength={160} /></label>}
+              <label>Designation<input value={designation} onChange={(event) => setDesignation(event.target.value)} maxLength={80} /></label>
+              <label>Department<input value={department} onChange={(event) => setDepartment(event.target.value)} maxLength={80} /></label>
+              <button type="submit" disabled={saveStaff.isPending}>{saveStaff.isPending ? "Saving…" : editing ? "Save changes" : "Add staff"}</button>
+              {editing && <button type="button" className={styles.outlineButton} onClick={resetForm}>Cancel</button>}
+            </form>
+            {saveStaff.error && <p className={styles.structureFormError} role="alert">{saveStaff.error}</p>}
+            {deactivateStaff.error && <p className={styles.structureFormError} role="alert">{deactivateStaff.error}</p>}
+          </Panel>
+        </div>
+      )}
+      <DirectoryTable title="Staff" description="View and manage staff profiles for the active school." rows={resource.data} columns={columns} isLoading={resource.isLoading} error={resource.error} refresh={resource.refresh} searchText={(row) => `${row.name} ${row.email} ${row.position} ${row.department}`} />
+    </>
+  );
 }
 
 export function ClassroomsDirectory() {
@@ -814,8 +943,22 @@ function ApiAttendanceReportDirectory() {
       )}
       {report.data && (
         <>
-          <p className={styles.reportSummary}>
-            {report.data.fromDate} to {report.data.toDate} · {report.data.totalSessions} closed sessions · {report.data.totalRecords} attendance records
+          <div className={styles.reportResultActions}>
+            <p className={styles.reportSummary}>
+              {report.data.fromDate} to {report.data.toDate} · {report.data.totalSessions} closed sessions · {report.data.totalRecords} attendance records
+            </p>
+            <button
+              className={styles.outlineButton}
+              type="button"
+              onClick={() => {
+                if (report.data) downloadAttendanceReportCsv(report.data);
+              }}
+            >
+              Download CSV
+            </button>
+          </div>
+          <p className={styles.reportExportNote}>
+            Aggregate counts only. The CSV is downloaded to your device and is not stored by Dashify.
           </p>
           <section className={styles.metricsGrid} aria-label="Attendance report counts">
             <MetricCard label="Present" value={report.data.statusCounts.PRESENT.toLocaleString()} detail="Recorded status" icon="users" tone="green" />
@@ -823,6 +966,44 @@ function ApiAttendanceReportDirectory() {
             <MetricCard label="Late" value={report.data.statusCounts.LATE.toLocaleString()} detail="Recorded status" icon="clock" tone="violet" />
             <MetricCard label="Excused" value={report.data.statusCounts.EXCUSED.toLocaleString()} detail="Recorded status" icon="check" tone="blue" />
           </section>
+          {report.data.dailyBreakdown.length > 0 && (
+            <section className={styles.panel} aria-labelledby="daily-attendance-breakdown">
+              <div className={styles.panelHeading}>
+                <div>
+                  <h2 id="daily-attendance-breakdown">Daily attendance breakdown</h2>
+                  <p>Counts for each date with at least one closed attendance session.</p>
+                </div>
+              </div>
+              <div className={styles.tableScroll}>
+                <table className={styles.table} aria-label="Daily attendance counts">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Closed sessions</th>
+                      <th>Records</th>
+                      <th>Present</th>
+                      <th>Absent</th>
+                      <th>Late</th>
+                      <th>Excused</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.data.dailyBreakdown.map((day) => (
+                      <tr key={day.date}>
+                        <td>{day.date}</td>
+                        <td>{day.totalSessions.toLocaleString()}</td>
+                        <td>{day.totalRecords.toLocaleString()}</td>
+                        <td>{day.statusCounts.PRESENT.toLocaleString()}</td>
+                        <td>{day.statusCounts.ABSENT.toLocaleString()}</td>
+                        <td>{day.statusCounts.LATE.toLocaleString()}</td>
+                        <td>{day.statusCounts.EXCUSED.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
           {report.data.totalSessions === 0 && (
             <p className={styles.reportSummary}>No closed attendance sessions were found for this date range.</p>
           )}

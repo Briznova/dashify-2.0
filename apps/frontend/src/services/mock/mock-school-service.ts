@@ -1,25 +1,31 @@
 import type { SchoolService } from "@/services/school-service";
 import type {
   AcademicYear,
+  Announcement,
   AttendanceReport,
   AcademicSection,
   AcademicReport,
   AttendanceRosterStudent,
   AttendanceSession,
   CreateAcademicSectionInput,
+  CreateAnnouncementInput,
   CreateAcademicYearInput,
   CreateClassroomInput,
+  CreateStaffInput,
   Assignment,
   AttendanceRecord,
   Classroom,
   FeeRecord,
   PortalOverview,
   PortalRole,
+  PlatformSchool,
   School,
   SchoolOverview,
   SchoolRole,
   SchoolSettingsData,
   SchoolProfile,
+  TeacherDashboard,
+  UpdateStaffInput,
   UpdateSchoolProfileInput,
   MarkAttendanceInput,
   StaffMember,
@@ -28,6 +34,17 @@ import type {
   StudentInput,
   StudentPage,
 } from "@/types/school";
+
+const mockAnnouncements: Announcement[] = [
+  {
+    id: "announcement-1",
+    title: "Welcome to the new term",
+    body: "Classes begin Monday. Please check with your school office for the term schedule.",
+    status: "PUBLISHED",
+    publishedAt: "2026-04-03T08:00:00.000Z",
+    createdAt: "2026-04-03T07:45:00.000Z",
+  },
+];
 
 function delay(signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -264,6 +281,27 @@ const metricsByRole: Record<SchoolRole, SchoolOverview["metrics"]> = {
 };
 
 export class MockSchoolService implements SchoolService {
+  async getTeacherDashboard(signal?: AbortSignal): Promise<TeacherDashboard> {
+    await delay(signal);
+    return {
+      schoolId: "SCH-001",
+      schoolName: "Northstar Academy",
+      localDate: "2026-04-03",
+      assignments: [
+        {
+          id: "CLASS-08-SECTION-A",
+          classId: "CLASS-08",
+          className: "Grade 8",
+          sectionId: "SECTION-A",
+          sectionName: "Section A",
+          subject: "Mathematics",
+          sessionStatus: "OPEN",
+          unmarkedCount: 3,
+        },
+      ],
+    };
+  }
+
   async getOverview(role: SchoolRole, signal?: AbortSignal): Promise<SchoolOverview> {
     await delay(signal);
     return {
@@ -390,7 +428,111 @@ export class MockSchoolService implements SchoolService {
 
   async getStaff(signal?: AbortSignal): Promise<StaffMember[]> {
     await delay(signal);
-    return staff;
+    return staff.map((member) => ({ ...member }));
+  }
+
+  async getAnnouncements(
+    includeDrafts = false,
+    signal?: AbortSignal,
+  ): Promise<Announcement[]> {
+    await delay(signal);
+    return mockAnnouncements
+      .filter((announcement) => includeDrafts || announcement.status === "PUBLISHED")
+      .map((announcement) => ({ ...announcement }));
+  }
+
+  async createAnnouncement(
+    input: CreateAnnouncementInput,
+  ): Promise<Announcement> {
+    await delay();
+    const title = input.title.trim();
+    const body = input.body.trim();
+    if (!title || !body) {
+      throw new Error("Enter a title and announcement message.");
+    }
+    const now = new Date().toISOString();
+    const announcement: Announcement = {
+      id: `announcement-${Date.now()}`,
+      title,
+      body,
+      status: "DRAFT",
+      publishedAt: null,
+      createdAt: now,
+    };
+    mockAnnouncements.unshift(announcement);
+    return { ...announcement };
+  }
+
+  async publishAnnouncement(id: string): Promise<Announcement> {
+    await delay();
+    const announcement = mockAnnouncements.find((item) => item.id === id);
+    if (!announcement) throw new Error("This announcement could not be found.");
+    if (announcement.status !== "DRAFT") {
+      throw new Error("This announcement has already been published.");
+    }
+    announcement.status = "PUBLISHED";
+    announcement.publishedAt = new Date().toISOString();
+    return { ...announcement };
+  }
+
+  async createStaff(input: CreateStaffInput): Promise<StaffMember> {
+    await delay();
+    if (
+      input.employeeCode &&
+      staff.some(
+        (member) =>
+          member.employeeCode?.toLowerCase() ===
+          input.employeeCode.trim().toLowerCase(),
+      )
+    ) {
+      throw new Error("Employee code already exists.");
+    }
+    const member: StaffMember = {
+      id: `staff-${Date.now()}`,
+      name: `${input.firstName} ${input.lastName ?? ""}`.trim(),
+      email: input.email ?? input.accountEmail ?? "",
+      position: input.designation ?? "Staff",
+      department: input.department ?? "General",
+      status: "Active",
+      employeeCode: input.employeeCode,
+      firstName: input.firstName,
+      lastName: input.lastName ?? null,
+      phone: input.phone ?? null,
+    };
+    staff.push(member);
+    return { ...member };
+  }
+
+  async updateStaff(
+    id: string,
+    input: UpdateStaffInput,
+  ): Promise<StaffMember> {
+    await delay();
+    const index = staff.findIndex((member) => member.id === id);
+    if (index < 0) throw new Error("This staff member could not be found.");
+    const current = staff[index];
+    const firstName = input.firstName ?? current.firstName ?? "";
+    const lastName = input.lastName ?? current.lastName ?? "";
+    const updated: StaffMember = {
+      ...current,
+      name: `${firstName} ${lastName}`.trim(),
+      email: input.email ?? current.email,
+      position: input.designation ?? current.position,
+      department: input.department ?? current.department,
+      employeeCode: input.employeeCode ?? current.employeeCode,
+      firstName,
+      lastName,
+      phone: input.phone ?? current.phone,
+    };
+    staff[index] = updated;
+    return { ...updated };
+  }
+
+  async deactivateStaff(id: string): Promise<void> {
+    await delay();
+    const member = staff.find((item) => item.id === id);
+    if (!member) throw new Error("This staff member could not be found.");
+    member.status = "Inactive";
   }
 
   async getClassrooms(signal?: AbortSignal): Promise<Classroom[]> {
@@ -456,6 +598,17 @@ export class MockSchoolService implements SchoolService {
     return schools;
   }
 
+  async getPlatformSchools(signal?: AbortSignal): Promise<PlatformSchool[]> {
+    await delay(signal);
+    return schools.map((school, index) => ({
+      id: school.id,
+      name: school.name,
+      code: school.id,
+      isActive: index !== 2,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }));
+  }
+
   async getAttendance(signal?: AbortSignal): Promise<AttendanceRecord[]> {
     await delay(signal);
     return attendance;
@@ -479,11 +632,36 @@ export class MockSchoolService implements SchoolService {
       LATE: 0,
       EXCUSED: 0,
     };
+    const dailyByDate = new Map<
+      string,
+      AttendanceReport["dailyBreakdown"][number]
+    >();
     for (const session of sessions) {
+      let day = dailyByDate.get(session.date);
+      if (!day) {
+        day = {
+          date: session.date,
+          totalSessions: 0,
+          totalRecords: 0,
+          statusCounts: {
+            PRESENT: 0,
+            ABSENT: 0,
+            LATE: 0,
+            EXCUSED: 0,
+          },
+        };
+        dailyByDate.set(session.date, day);
+      }
+      day.totalSessions += 1;
       for (const record of session.records) {
         statusCounts[record.status] += 1;
+        day.statusCounts[record.status] += 1;
+        day.totalRecords += 1;
       }
     }
+    const dailyBreakdown = [...dailyByDate.values()].sort((first, second) =>
+      first.date.localeCompare(second.date),
+    );
 
     return {
       fromDate,
@@ -494,6 +672,7 @@ export class MockSchoolService implements SchoolService {
         0,
       ),
       statusCounts,
+      dailyBreakdown,
     };
   }
 

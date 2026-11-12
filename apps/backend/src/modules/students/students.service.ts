@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 
@@ -84,13 +89,43 @@ export class StudentsService {
     });
   }
 
-  async update(schoolId: string, id: string, dto: Partial<CreateStudentDto>) {
+  async update(
+    schoolId: string,
+    actorId: string,
+    id: string,
+    dto: Partial<CreateStudentDto>,
+  ) {
+    const guardianInputs = dto.guardians;
+    if (guardianInputs) {
+      if (guardianInputs.filter((guardian) => guardian.isPrimary === true).length > 1) {
+        throw new BadRequestException('Only one primary guardian is allowed');
+      }
+
+      const guardianIds = guardianInputs
+        .map((guardian) => guardian.id)
+        .filter((guardianId): guardianId is string => guardianId !== undefined);
+      if (new Set(guardianIds).size !== guardianIds.length) {
+        throw new BadRequestException('A guardian can only appear once');
+      }
+    }
+
     return this.prisma.withTenant(schoolId, async (tx) => {
       const student = await tx.student.findFirst({
         where: { id, schoolId },
         include: { guardians: { include: { guardian: true } }, enrolments: true },
       });
       if (!student) throw new NotFoundException('Student not found');
+
+      const linkedGuardianIds = new Set(
+        student.guardians.map((link) => link.guardianId),
+      );
+      if (
+        guardianInputs?.some(
+          (guardian) => guardian.id && !linkedGuardianIds.has(guardian.id),
+        )
+      ) {
+        throw new NotFoundException('Guardian not found');
+      }
 
       if (dto.admissionNumber && dto.admissionNumber !== student.admissionNumber) {
         const duplicate = await tx.student.findFirst({
@@ -100,8 +135,9 @@ export class StudentsService {
       }
 
       let updatedStudent = student;
-      if (Object.keys(dto).length > 0) {
-        const { guardians, ...studentData } = dto;
+      const { guardians, ...studentData } = dto;
+      const changedFields = Object.keys(dto);
+      if (Object.keys(studentData).length > 0) {
         updatedStudent = await tx.student.update({
           where: { id },
           data: {
@@ -117,9 +153,18 @@ export class StudentsService {
         });
       }
 
+      const guardianLinkChanges = { added: 0, updated: 0, removed: 0 };
       if (dto.guardians !== undefined) {
-        const incomingGuardianIds = dto.guardians.filter((guardian) => guardian.id).map((guardian) => guardian.id as string);
+        const incomingGuardianIds = dto.guardians
+          .flatMap((guardian) => (guardian.id ? [guardian.id] : []));
         const toRemove = updatedStudent.guardians.filter((link) => !incomingGuardianIds.includes(link.guardianId));
+        guardianLinkChanges.added = dto.guardians.filter(
+          (guardian) => !guardian.id,
+        ).length;
+        guardianLinkChanges.updated = dto.guardians.filter(
+          (guardian) => guardian.id,
+        ).length;
+        guardianLinkChanges.removed = toRemove.length;
         if (toRemove.length > 0) {
           await tx.studentGuardian.deleteMany({
             where: { schoolId, studentId: id, guardianId: { in: toRemove.map((link) => link.guardianId) } },
@@ -167,9 +212,22 @@ export class StudentsService {
           });
         }
 
-        return tx.student.findUniqueOrThrow({
+        updatedStudent = await tx.student.findUniqueOrThrow({
           where: { id },
           include: { guardians: { include: { guardian: true } }, enrolments: true },
+        });
+      }
+
+      if (changedFields.length > 0) {
+        await tx.auditLog.create({
+          data: {
+            schoolId,
+            actorUserId: actorId,
+            action: 'STUDENT_UPDATED',
+            resource: 'student',
+            resourceId: id,
+            summary: { changedFields, guardianLinkChanges },
+          },
         });
       }
 
