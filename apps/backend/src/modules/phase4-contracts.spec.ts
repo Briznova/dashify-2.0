@@ -1,7 +1,12 @@
+import { ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { validate } from 'class-validator';
 import { PERMISSIONS_KEY } from '../common/decorators/permissions.decorator';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { AcademicController } from './academic/academic.controller';
 import { CreateAcademicYearDto } from './academic/dto/create-academic-year.dto';
+import { CreateClassDto } from './academic/dto/create-class.dto';
+import { CreateSectionDto } from './academic/dto/create-section.dto';
 import { AttendanceController } from './attendance/attendance.controller';
 import { CreateAttendanceSessionDto } from './attendance/dto/create-session.dto';
 import { MarkRecordsDto } from './attendance/dto/mark-records.dto';
@@ -9,6 +14,7 @@ import { SchoolsController } from './schools/schools.controller';
 import { UpdateSchoolDto } from './schools/dto/update-school.dto';
 import { StudentsController } from './students/students.controller';
 import { CreateStudentDto } from './students/dto/create-student.dto';
+import { UpdateStudentDto } from './students/dto/update-student.dto';
 
 function routePermissions(
   controller: object,
@@ -54,6 +60,9 @@ describe('Phase 4 controller permissions', () => {
     expect(routePermissions(StudentsController.prototype, 'create')).toEqual([
       'students.create',
     ]);
+    expect(routePermissions(StudentsController.prototype, 'update')).toEqual([
+      'students.update',
+    ]);
     expect(routePermissions(AttendanceController.prototype, 'list')).toEqual([
       'attendance.read',
     ]);
@@ -70,9 +79,52 @@ describe('Phase 4 controller permissions', () => {
       'attendance.correct',
     ]);
   });
+
+  it('denies direct class and section creation without academic_structure.manage', () => {
+    const guard = new PermissionsGuard(new Reflector());
+    for (const method of ['createClass', 'createSection'] as const) {
+      const handler = AcademicController.prototype[method];
+      const context = (permissions: string[]) =>
+        ({
+          getHandler: () => handler,
+          getClass: () => AcademicController,
+          switchToHttp: () => ({
+            getRequest: () => ({ user: { permissions } }),
+          }),
+        }) as unknown as ExecutionContext;
+
+      expect(() => guard.canActivate(context([]))).toThrow(ForbiddenException);
+      expect(() =>
+        guard.canActivate(context(['academic_structure.manage'])),
+      ).not.toThrow();
+    }
+  });
 });
 
 describe('Phase 4 request validation', () => {
+  it('rejects invalid class and section creation fields', async () => {
+    const classroom = Object.assign(new CreateClassDto(), {
+      name: '',
+      code: 'x'.repeat(21),
+      sortOrder: -1,
+    });
+    const section = Object.assign(new CreateSectionDto(), {
+      classId: 'not-a-uuid',
+      name: '',
+      code: '',
+      capacity: 0,
+    });
+
+    const classErrors = await validate(classroom);
+    const sectionErrors = await validate(section);
+    expect(classErrors.map(({ property }) => property)).toEqual(
+      expect.arrayContaining(['name', 'code', 'sortOrder']),
+    );
+    expect(sectionErrors.map(({ property }) => property)).toEqual(
+      expect.arrayContaining(['classId', 'name', 'code', 'capacity']),
+    );
+  });
+
   it('rejects invalid academic-year and school-profile fields', async () => {
     const academicYear = Object.assign(new CreateAcademicYearDto(), {
       name: 'x'.repeat(81),
@@ -104,6 +156,14 @@ describe('Phase 4 request validation', () => {
       sectionId: 'not-a-uuid',
       guardians: [],
     });
+    const updateStudent = Object.assign(new UpdateStudentDto(), {
+      academicYearId: 'still-not-a-uuid',
+      guardians: [{
+        firstName: 'Priya',
+        relationship: 'MOTHER',
+        phone: 'bad-phone',
+      }],
+    });
     const session = Object.assign(new CreateAttendanceSessionDto(), {
       classId: 'not-a-uuid',
       sectionId: 'not-a-uuid',
@@ -114,10 +174,14 @@ describe('Phase 4 request validation', () => {
     });
 
     const studentErrors = await validate(student);
+    const studentUpdateErrors = await validate(updateStudent);
     const sessionErrors = await validate(session);
     const attendanceErrors = await validate(attendance);
     expect(studentErrors.map(({ property }) => property)).toEqual(
       expect.arrayContaining(['academicYearId', 'classId', 'sectionId']),
+    );
+    expect(studentUpdateErrors.map(({ property }) => property)).toEqual(
+      expect.arrayContaining(['academicYearId', 'guardians']),
     );
     expect(sessionErrors.map(({ property }) => property)).toEqual(
       expect.arrayContaining(['classId', 'sectionId', 'date']),

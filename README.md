@@ -35,6 +35,18 @@ NEXT_PUBLIC_DASHIFY_API_BASE_URL=http://localhost:3001
 
 The frontend appends `/api/v1` to the configured backend origin.
 
+### Run all dev services with PM2
+
+From the repository root, start the frontend, backend, and Prisma Studio together:
+
+```powershell
+pm2 start ecosystem.config.cjs
+pm2 save
+pm2 status
+```
+
+The processes run in development mode and load their environment from each app's existing env file. PM2 automatically restarts a process if it exits. Use `pm2 logs` to view output and `pm2 stop all` to stop the services. The apps run at `http://localhost:3000`, `http://localhost:3001/api/v1`, and `http://localhost:5555`.
+
 ### Backend
 
 ```powershell

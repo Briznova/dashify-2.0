@@ -4,9 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import { schoolService } from "@/services";
 import type {
   AcademicYear,
+  AttendanceReport,
   AttendanceRosterStudent,
   AttendanceSession,
+  CreateAcademicSectionInput,
   CreateAcademicYearInput,
+  CreateClassroomInput,
   AcademicReport,
   Assignment,
   AttendanceRecord,
@@ -120,7 +123,7 @@ export function useStudent(id: string) {
     (signal: AbortSignal) => schoolService.getStudent(id, signal),
     [id],
   );
-  return useRemoteResource<Student>(load);
+  return useRemoteResource<Student>(id ? load : null);
 }
 
 export function useSaveStudent() {
@@ -131,8 +134,12 @@ export function useSaveStudent() {
     setIsPending(true);
     setError(null);
     try {
-      if (id && "name" in input) return await schoolService.updateStudent(id, input);
-      if (!id && "admissionNumber" in input) return await schoolService.createStudent(input);
+      if (id) {
+        return await schoolService.updateStudent(id, input as StudentInput);
+      }
+      if (!id && "admissionNumber" in input && typeof input.admissionNumber === "string") {
+        return await schoolService.createStudent(input as StudentCreateInput);
+      }
       throw new Error("Student input does not match the requested operation.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to save this student.");
@@ -155,6 +162,42 @@ export function useClassrooms() {
   return useRemoteResource<Classroom[]>(load);
 }
 
+export function useCreateClassroom() {
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const create = useCallback(async (input: CreateClassroomInput) => {
+    setIsPending(true);
+    setError(null);
+    try {
+      return await schoolService.createClassroom(input);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to create the class.");
+      return null;
+    } finally {
+      setIsPending(false);
+    }
+  }, []);
+  return { create, isPending, error };
+}
+
+export function useCreateAcademicSection() {
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const create = useCallback(async (input: CreateAcademicSectionInput) => {
+    setIsPending(true);
+    setError(null);
+    try {
+      return await schoolService.createAcademicSection(input);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to create the section.");
+      return null;
+    } finally {
+      setIsPending(false);
+    }
+  }, []);
+  return { create, isPending, error };
+}
+
 export function useSchools() {
   const load = useCallback((signal: AbortSignal) => schoolService.getSchools(signal), []);
   return useRemoteResource<School[]>(load);
@@ -163,6 +206,19 @@ export function useSchools() {
 export function useAttendance() {
   const load = useCallback((signal: AbortSignal) => schoolService.getAttendance(signal), []);
   return useRemoteResource<AttendanceRecord[]>(load);
+}
+
+export function useAttendanceReport(fromDate: string | null, toDate: string | null) {
+  const load = useCallback(
+    (signal: AbortSignal) => {
+      if (!fromDate || !toDate) {
+        throw new Error("A date range is required to generate an attendance report.");
+      }
+      return schoolService.getAttendanceReport(fromDate, toDate, signal);
+    },
+    [fromDate, toDate],
+  );
+  return useRemoteResource<AttendanceReport>(fromDate && toDate ? load : null);
 }
 
 export function useAcademicReports() {

@@ -206,6 +206,18 @@ describe("role access policy", () => {
       ),
     ).toEqual(["overview", "students", "classes", "attendance", "academics"]);
     expect(
+      getRoleNavigation("school_admin", [...permissionKeys, "staff.read"]).map(
+        (item) => item.capability,
+      ),
+    ).toContain("staff");
+    expect(
+      isDashboardRouteAllowed(
+        "/dashboard/staff",
+        "school_admin",
+        [...permissionKeys, "staff.read"],
+      ),
+    ).toBe(true);
+    expect(
       isDashboardRouteAllowed(
         "/dashboard/classes/sections",
         "school_admin",
@@ -258,6 +270,22 @@ describe("role access policy", () => {
     );
     expect(
       isDashboardRouteAllowed("/dashboard/teacher/assignments", "teacher", []),
+    ).toBe(false);
+  });
+
+  it("exposes reports in API mode only when reports.read is granted", () => {
+    expect(
+      getRoleNavigation("school_admin", ["reports.read"]).map(
+        (item) => item.capability,
+      ),
+    ).toContain("reports");
+    expect(
+      isDashboardRouteAllowed("/dashboard/reports", "school_admin", [
+        "reports.read",
+      ]),
+    ).toBe(true);
+    expect(
+      isDashboardRouteAllowed("/dashboard/reports", "school_admin", []),
     ).toBe(false);
   });
 

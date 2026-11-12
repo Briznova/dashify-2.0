@@ -1,0 +1,98 @@
+openapi: 3.0.3
+info:
+  title: DASHIFY School Attendance Report Contract
+  version: 1.0.0
+  description: >
+    Approved first report slice. Returns aggregate attendance counts for closed
+    sessions in an inclusive date range for the authenticated active school.
+    Student-level detail, exports, and other report types remain out of scope.
+servers:
+  - url: http://localhost:3001/api/v1
+    description: Local development URL
+tags:
+  - name: Reports
+paths:
+  /reports/attendance:
+    get:
+      tags: [Reports]
+      operationId: getAttendanceReport
+      summary: Get school attendance counts for a date range
+      description: >
+        Requires cookie authentication, an active school session, and
+        reports.read. Tenant scope is derived from the session; no school
+        identifier is accepted from the client. Only closed attendance
+        sessions are included.
+      security:
+        - accessCookie: []
+      parameters:
+        - name: fromDate
+          in: query
+          required: true
+          description: Inclusive start calendar date in YYYY-MM-DD format.
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          required: true
+          description: Inclusive end calendar date in YYYY-MM-DD format.
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Aggregate counts for closed sessions in the selected range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceReport"
+        "400":
+          description: Invalid date or reversed date range
+        "401":
+          description: Authentication is required
+        "403":
+          description: The session lacks reports.read
+components:
+  securitySchemes:
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: dashify_access
+  schemas:
+    AttendanceStatusCounts:
+      type: object
+      additionalProperties: false
+      required: [PRESENT, ABSENT, LATE, EXCUSED]
+      properties:
+        PRESENT:
+          type: integer
+          minimum: 0
+        ABSENT:
+          type: integer
+          minimum: 0
+        LATE:
+          type: integer
+          minimum: 0
+        EXCUSED:
+          type: integer
+          minimum: 0
+    AttendanceReport:
+      type: object
+      additionalProperties: false
+      required: [fromDate, toDate, totalSessions, totalRecords, statusCounts]
+      properties:
+        fromDate:
+          type: string
+          format: date
+        toDate:
+          type: string
+          format: date
+        totalSessions:
+          type: integer
+          minimum: 0
+        totalRecords:
+          type: integer
+          minimum: 0
+          description: Sum of the attendance status counts.
+        statusCounts:
+          $ref: "#/components/schemas/AttendanceStatusCounts"

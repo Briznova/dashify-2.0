@@ -1,10 +1,14 @@
 import type { SchoolService } from "@/services/school-service";
 import type {
   AcademicYear,
+  AttendanceReport,
+  AcademicSection,
   AcademicReport,
   AttendanceRosterStudent,
   AttendanceSession,
+  CreateAcademicSectionInput,
   CreateAcademicYearInput,
+  CreateClassroomInput,
   Assignment,
   AttendanceRecord,
   Classroom,
@@ -355,16 +359,31 @@ export class MockSchoolService implements SchoolService {
     await delay();
     const index = students.findIndex((student) => student.id === id);
     if (index < 0) throw new Error("This student could not be found.");
+    const { name, studentNumber, grade, guardian } = input;
+    if (
+      typeof name !== "string" ||
+      typeof studentNumber !== "string" ||
+      typeof grade !== "string" ||
+      typeof guardian !== "string"
+    ) {
+      throw new Error("Complete all student details before saving.");
+    }
     const duplicate = students.some(
       (student, studentIndex) =>
         studentIndex !== index &&
-        student.studentNumber.toLowerCase() === input.studentNumber.trim().toLowerCase(),
+        student.studentNumber.toLowerCase() === studentNumber.trim().toLowerCase(),
     );
     if (duplicate) throw new Error("A student with this ID already exists.");
-    if (!input.name.trim() || !input.studentNumber.trim() || !input.grade.trim() || !input.guardian.trim()) {
+    if (!name.trim() || !studentNumber.trim() || !grade.trim() || !guardian.trim()) {
       throw new Error("Complete all student details before saving.");
     }
-    const updated: Student = { ...students[index], ...input };
+    const updated: Student = {
+      ...students[index],
+      name: name.trim(),
+      studentNumber: studentNumber.trim(),
+      grade: grade.trim(),
+      guardian: guardian.trim(),
+    };
     students[index] = updated;
     return { ...updated };
   }
@@ -377,6 +396,43 @@ export class MockSchoolService implements SchoolService {
   async getClassrooms(signal?: AbortSignal): Promise<Classroom[]> {
     await delay(signal);
     return classrooms;
+  }
+
+  async createClassroom(input: CreateClassroomInput): Promise<Classroom> {
+    await delay();
+    if (classrooms.some((classroom) => classroom.code === input.code)) {
+      throw new Error("A class with this code already exists.");
+    }
+    const classroom: Classroom = {
+      id: `class-${Date.now()}`,
+      name: input.name,
+      code: input.code,
+      sortOrder: input.sortOrder ?? 0,
+      isActive: true,
+      sections: [],
+    };
+    classrooms.push(classroom);
+    return classroom;
+  }
+
+  async createAcademicSection(
+    input: CreateAcademicSectionInput,
+  ): Promise<AcademicSection> {
+    await delay();
+    const classroom = classrooms.find((item) => item.id === input.classId);
+    if (!classroom) throw new Error("This class could not be found.");
+    if (classroom.sections.some((section) => section.code === input.code)) {
+      throw new Error("A section with this code already exists for this class.");
+    }
+    const section: AcademicSection = {
+      id: `section-${Date.now()}`,
+      name: input.name,
+      code: input.code,
+      capacity: input.capacity ?? null,
+      isActive: true,
+    };
+    classroom.sections.push(section);
+    return section;
   }
 
   async getAcademicYears(signal?: AbortSignal): Promise<AcademicYear[]> {
@@ -403,6 +459,42 @@ export class MockSchoolService implements SchoolService {
   async getAttendance(signal?: AbortSignal): Promise<AttendanceRecord[]> {
     await delay(signal);
     return attendance;
+  }
+
+  async getAttendanceReport(
+    fromDate: string,
+    toDate: string,
+    signal?: AbortSignal,
+  ): Promise<AttendanceReport> {
+    await delay(signal);
+    const sessions = attendanceSessions.filter(
+      (session) =>
+        session.status === "CLOSED" &&
+        session.date >= fromDate &&
+        session.date <= toDate,
+    );
+    const statusCounts: AttendanceReport["statusCounts"] = {
+      PRESENT: 0,
+      ABSENT: 0,
+      LATE: 0,
+      EXCUSED: 0,
+    };
+    for (const session of sessions) {
+      for (const record of session.records) {
+        statusCounts[record.status] += 1;
+      }
+    }
+
+    return {
+      fromDate,
+      toDate,
+      totalSessions: sessions.length,
+      totalRecords: Object.values(statusCounts).reduce(
+        (total, count) => total + count,
+        0,
+      ),
+      statusCounts,
+    };
   }
 
   async getAttendanceSessions(date: string, signal?: AbortSignal): Promise<AttendanceSession[]> {

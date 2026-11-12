@@ -510,6 +510,48 @@
   font-weight: 600;
 }
 
+.reportFilters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid #e9ebf2;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.reportDateField {
+  display: grid;
+  gap: 6px;
+  color: #646c82;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.reportDateField input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 10px;
+  border: 1px solid #e8eaf0;
+  border-radius: 6px;
+  background: #fff;
+  color: #454c62;
+  font-size: 13px;
+}
+
+.reportSummary,
+.reportError {
+  margin: 0 0 12px;
+  color: #646c82;
+  font-size: 13px;
+}
+
+.reportError {
+  color: #bd3947;
+}
+
 .metricsGrid + .panel {
   margin-top: 2px;
 }
@@ -1007,12 +1049,87 @@
   min-height: 58px;
 }
 
+.createStructureForms {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.createStructureForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.createStructureForm label {
+  display: grid;
+  gap: 6px;
+  color: #646c82;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.createStructureForm input,
+.createStructureForm select {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid #e8eaf0;
+  border-radius: 6px;
+  background: #fff;
+  color: #454c62;
+  font-size: 12px;
+}
+
+.createStructureForm input:focus,
+.createStructureForm select:focus {
+  outline: 2px solid #dfe4ff;
+  border-color: #6678f3;
+}
+
+.createStructureForm button {
+  min-height: 36px;
+  align-self: end;
+  padding: 0 13px;
+  border: 1px solid #4058df;
+  border-radius: 8px;
+  background: #4058df;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.createStructureForm button:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+
+.structureFormError,
+.structureReadOnly {
+  margin: 10px 0 0;
+  color: #a53c45;
+  font-size: 12px;
+}
+
+.structureReadOnly {
+  margin: 0 0 12px;
+  color: #81889a;
+}
+
 @media (max-width: 1020px) {
   .metricsGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .dashboardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .createStructureForms {
     grid-template-columns: 1fr;
   }
 }
@@ -1051,6 +1168,10 @@
   }
 
   .settingsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .createStructureForm {
     grid-template-columns: 1fr;
   }
 

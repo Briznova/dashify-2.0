@@ -18,9 +18,12 @@ The monorepo uses these links as the source of truth for coordinated feature wor
 | [Contract baseline](./01-contract-baseline.md) | Observed frontend/backend contracts and verified mismatches |
 | [Identity and tenancy spec](./02-identity-auth-tenancy-spec.md) | Auth/session, school selection, role mapping, and tenant boundaries |
 | [Auth/session OpenAPI contract](./contracts/auth-session.openapi.yaml) | Approved planning contract for auth and school/workspace selection; reset operations remain proposed |
+| [Dashboard OpenAPI contract](../api-contracts/dashboard.openapi.yaml) | Approved school-administrator current-count endpoint; other roles and trend metrics remain out of scope |
+| [Attendance report OpenAPI contract](../api-contracts/attendance-report.openapi.yaml) | Approved school-administrator aggregate report for closed sessions; no exports or student-level detail |
 | [Access and workspace spec](./03-access-and-workspace-spec.md) | Frontend role policy and its relationship to backend permissions |
 | [Core integration slices](./04-core-integration-slices.md) | Student, academic structure, and attendance vertical slices |
 | [Backend capability backlog](./05-backend-capability-backlog.md) | Missing or incomplete backend capabilities and proposed sequencing |
+| [Phase 5 proposed specs](./05a-phase5-proposed-specs.md) | Feature proposals and scope decisions for the Phase 5 backlog |
 | [Verification and release](./06-verification-and-release.md) | Contract, integration, authorization, isolation, and release criteria |
 | [Decision register](./decisions/README.md) | Open architecture/product decisions that block implementation |
 | [Feature spec template](./templates/feature-spec-template.md) | Required format for implementation-ready feature specs |

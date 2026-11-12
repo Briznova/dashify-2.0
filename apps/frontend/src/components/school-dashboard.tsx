@@ -6,9 +6,12 @@ import {
   useAcademicReports,
   useAttendanceActions,
   useAttendanceRoster,
+  useAttendanceReport,
   useAttendanceSessions,
   useAttendance,
   useClassrooms,
+  useCreateAcademicSection,
+  useCreateClassroom,
   useSchoolOverview,
   useSchoolProfile,
   useSchoolSettings,
@@ -25,6 +28,7 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Icon } from "@/components/ui/icon";
 import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeading } from "@/components/ui/page-heading";
+import { Panel } from "@/components/ui/panel";
 import { ResourceState } from "@/components/ui/resource-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { isApiMode, schoolService } from "@/services";
@@ -66,11 +70,15 @@ function RoleDashboard({ sessionRole, userName }: { sessionRole: SchoolRole; use
       <PageHeading
         eyebrow={`${data?.schoolName ?? "SCHOOL WORKSPACE"} · ${roleLabels[role].toUpperCase()}`}
         title={`Good morning, ${userName.trim().split(/\s+/)[0]} ✨`}
-        description={role === "super_admin"
-          ? "Monitor school workspaces, onboarding, and network-wide performance."
-          : role === "principal"
-            ? "A school-wide view of learning, classroom activity, and student wellbeing."
-            : "Your school at a glance: attendance, fees, enrollment, and daily operations."}
+        description={isApiMode
+          ? role === "school_admin"
+            ? "Current counts for active students, staff, classes, and sections."
+            : "Role-specific dashboard data is not available yet."
+          : role === "super_admin"
+            ? "Monitor school workspaces, onboarding, and network-wide performance."
+            : role === "principal"
+              ? "A school-wide view of learning, classroom activity, and student wellbeing."
+              : "Your school at a glance: attendance, fees, enrollment, and daily operations."}
       />
       <ResourceState error={error} isLoading={isLoading} onRetry={refresh} />
       {data && (
@@ -80,17 +88,19 @@ function RoleDashboard({ sessionRole, userName }: { sessionRole: SchoolRole; use
               key={metric.label}
               label={metric.label}
               value={metric.value}
-              detail={metric.change}
-              trend={metric.positive ? "positive" : "negative"}
+              detail={metric.change ?? "Current total"}
+              trend={metric.positive === undefined
+                ? undefined
+                : metric.positive ? "positive" : "negative"}
               icon={metric.icon}
               tone={metric.tone}
             />
           ))}
         </section>
       )}
-      {data && role === "super_admin" && <SuperAdminWorkspace data={data} points={points} />}
-      {data && role === "school_admin" && <SchoolAdminWorkspace events={data.upcomingEvents} approvals={data.pendingApprovals} />}
-      {data && role === "principal" && <PrincipalWorkspace events={data.upcomingEvents} approvals={data.pendingApprovals} />}
+      {data && !isApiMode && role === "super_admin" && <SuperAdminWorkspace data={data} points={points} />}
+      {data && !isApiMode && role === "school_admin" && <SchoolAdminWorkspace events={data.upcomingEvents} approvals={data.pendingApprovals} />}
+      {data && !isApiMode && role === "principal" && <PrincipalWorkspace events={data.upcomingEvents} approvals={data.pendingApprovals} />}
     </>
   );
 }
@@ -445,12 +455,88 @@ export function StaffDirectory() {
 
 export function ClassroomsDirectory() {
   const resource = useClassrooms();
+  const { session } = useAuthSession();
+  const createClassroom = useCreateClassroom();
+  const createSection = useCreateAcademicSection();
+  const [className, setClassName] = useState("");
+  const [classCode, setClassCode] = useState("");
+  const [sortOrder, setSortOrder] = useState("");
+  const [sectionClassId, setSectionClassId] = useState("");
+  const [sectionName, setSectionName] = useState("");
+  const [sectionCode, setSectionCode] = useState("");
+  const [capacity, setCapacity] = useState("");
+  const canManage = Boolean(
+    session?.permissionKeys.includes("academic_structure.manage"),
+  );
   const columns: Column<Classroom>[] = [
     { heading: "CLASS", render: (row) => <span className={styles.tablePerson}><strong className={styles.tableStrong}>{row.name}</strong><small>{row.code}</small></span> },
     { heading: "SECTIONS", render: (row) => row.sections.length === 0 ? "—" : row.sections.map((section) => `${section.name} (${section.code})${section.capacity === null ? "" : ` · Capacity ${section.capacity}`}${section.isActive ? "" : " · Inactive"}`).join(", ") },
     { heading: "STATUS", render: (row) => <StatusBadge variant={row.isActive ? "success" : "warning"}>{row.isActive ? "Active" : "Inactive"}</StatusBadge> },
   ];
-  return <DirectoryTable title="Classes & sections" description="View academic classes and their configured sections." rows={resource.data} columns={columns} isLoading={resource.isLoading} error={resource.error} refresh={resource.refresh} searchText={(row) => `${row.name} ${row.code} ${row.sections.map((section) => `${section.name} ${section.code}`).join(" ")}`} />;
+  const activeClasses = (resource.data ?? []).filter((classroom) => classroom.isActive);
+
+  async function handleCreateClass(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const classroom = await createClassroom.create({
+      name: className.trim(),
+      code: classCode.trim(),
+      sortOrder: sortOrder ? Number(sortOrder) : undefined,
+    });
+    if (!classroom) return;
+    setClassName("");
+    setClassCode("");
+    setSortOrder("");
+    setSectionClassId(classroom.id);
+    resource.refresh();
+  }
+
+  async function handleCreateSection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const section = await createSection.create({
+      classId: sectionClassId,
+      name: sectionName.trim(),
+      code: sectionCode.trim(),
+      capacity: capacity ? Number(capacity) : undefined,
+    });
+    if (!section) return;
+    setSectionName("");
+    setSectionCode("");
+    setCapacity("");
+    resource.refresh();
+  }
+
+  return (
+    <>
+      {isApiMode && canManage && (
+        <div className={styles.createStructureForms}>
+          <Panel title="Create class" description="Add a class to the active school. Class codes must be unique within the school.">
+            <form className={styles.createStructureForm} onSubmit={handleCreateClass}>
+              <label>Class name<input value={className} onChange={(event) => setClassName(event.target.value)} maxLength={80} required /></label>
+              <label>Class code<input value={classCode} onChange={(event) => setClassCode(event.target.value)} maxLength={20} required /></label>
+              <label>Sort order<input type="number" min="0" step="1" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} /></label>
+              <button type="submit" disabled={createClassroom.isPending}>{createClassroom.isPending ? "Creating…" : "Create class"}</button>
+            </form>
+            {createClassroom.error && <p className={styles.structureFormError} role="alert">{createClassroom.error}</p>}
+          </Panel>
+          <Panel title="Create section" description="Add a section to an active class. Section codes must be unique within that class.">
+            <form className={styles.createStructureForm} onSubmit={handleCreateSection}>
+              <label>Class<select value={sectionClassId} onChange={(event) => setSectionClassId(event.target.value)} required>
+                <option value="">Select a class</option>
+                {activeClasses.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.name} ({classroom.code})</option>)}
+              </select></label>
+              <label>Section name<input value={sectionName} onChange={(event) => setSectionName(event.target.value)} maxLength={40} required /></label>
+              <label>Section code<input value={sectionCode} onChange={(event) => setSectionCode(event.target.value)} maxLength={20} required /></label>
+              <label>Capacity<input type="number" min="1" step="1" value={capacity} onChange={(event) => setCapacity(event.target.value)} /></label>
+              <button type="submit" disabled={createSection.isPending || !activeClasses.length}>{createSection.isPending ? "Creating…" : "Create section"}</button>
+            </form>
+            {createSection.error && <p className={styles.structureFormError} role="alert">{createSection.error}</p>}
+          </Panel>
+        </div>
+      )}
+      {isApiMode && !canManage && <p className={styles.structureReadOnly}>You have read-only access to classes and sections.</p>}
+      <DirectoryTable title="Classes & sections" description="View academic classes and their configured sections." rows={resource.data} columns={columns} isLoading={resource.isLoading} error={resource.error} refresh={resource.refresh} searchText={(row) => `${row.name} ${row.code} ${row.sections.map((section) => `${section.name} ${section.code}`).join(" ")}`} />
+    </>
+  );
 }
 
 export function SchoolsDirectory() {
@@ -639,6 +725,12 @@ function ApiAttendanceDirectory() {
 }
 
 export function AcademicReportsDirectory() {
+  return isApiMode
+    ? <ApiAttendanceReportDirectory />
+    : <MockAcademicReportsDirectory />;
+}
+
+function MockAcademicReportsDirectory() {
   const resource = useAcademicReports();
   const columns: Column<AcademicReport>[] = [
     { heading: "REPORT", render: (row) => <strong className={styles.tableStrong}>{row.title}</strong> },
@@ -648,6 +740,96 @@ export function AcademicReportsDirectory() {
     { heading: "ACTION", render: () => <span className={styles.reportAction}>Open report ↗</span> },
   ];
   return <DirectoryTable title="Academic reports" description="Review enrollment, attendance, and academic performance." rows={resource.data} columns={columns} isLoading={resource.isLoading} error={resource.error} refresh={resource.refresh} searchText={(row) => `${row.title} ${row.category} ${row.owner}`} />;
+}
+
+function ApiAttendanceReportDirectory() {
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [requestedRange, setRequestedRange] = useState<{
+    fromDate: string;
+    toDate: string;
+  } | null>(null);
+  const [rangeError, setRangeError] = useState<string | null>(null);
+  const report = useAttendanceReport(
+    requestedRange?.fromDate ?? null,
+    requestedRange?.toDate ?? null,
+  );
+
+  function generateReport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setRangeError(null);
+    if (!fromDate || !toDate || fromDate > toDate) {
+      setRangeError("Choose a valid date range with the start date on or before the end date.");
+      return;
+    }
+    if (
+      requestedRange?.fromDate === fromDate &&
+      requestedRange.toDate === toDate
+    ) {
+      report.refresh();
+    } else {
+      setRequestedRange({ fromDate, toDate });
+    }
+  }
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="REPORTS"
+        title="Attendance report"
+        description="School-wide counts from closed attendance sessions for a selected date range."
+      />
+      <form className={styles.reportFilters} onSubmit={generateReport}>
+        <label className={styles.reportDateField} htmlFor="attendance-report-from">
+          From date
+          <input
+            id="attendance-report-from"
+            type="date"
+            required
+            value={fromDate}
+            onChange={(event) => setFromDate(event.target.value)}
+          />
+        </label>
+        <label className={styles.reportDateField} htmlFor="attendance-report-to">
+          To date
+          <input
+            id="attendance-report-to"
+            type="date"
+            required
+            value={toDate}
+            onChange={(event) => setToDate(event.target.value)}
+          />
+        </label>
+        <button className={styles.primaryButton} type="submit" disabled={report.isLoading}>
+          {report.isLoading ? "Generating…" : "Generate report"}
+        </button>
+      </form>
+      {rangeError && <p className={styles.reportError} role="alert">{rangeError}</p>}
+      {requestedRange && (
+        <ResourceState
+          error={report.error}
+          isLoading={report.isLoading}
+          onRetry={report.refresh}
+        />
+      )}
+      {report.data && (
+        <>
+          <p className={styles.reportSummary}>
+            {report.data.fromDate} to {report.data.toDate} · {report.data.totalSessions} closed sessions · {report.data.totalRecords} attendance records
+          </p>
+          <section className={styles.metricsGrid} aria-label="Attendance report counts">
+            <MetricCard label="Present" value={report.data.statusCounts.PRESENT.toLocaleString()} detail="Recorded status" icon="users" tone="green" />
+            <MetricCard label="Absent" value={report.data.statusCounts.ABSENT.toLocaleString()} detail="Recorded status" icon="users" tone="orange" />
+            <MetricCard label="Late" value={report.data.statusCounts.LATE.toLocaleString()} detail="Recorded status" icon="clock" tone="violet" />
+            <MetricCard label="Excused" value={report.data.statusCounts.EXCUSED.toLocaleString()} detail="Recorded status" icon="check" tone="blue" />
+          </section>
+          {report.data.totalSessions === 0 && (
+            <p className={styles.reportSummary}>No closed attendance sessions were found for this date range.</p>
+          )}
+        </>
+      )}
+    </>
+  );
 }
 
 export function AcademicAnalytics() {

@@ -25,8 +25,8 @@
 | Attendance | Session read/create/mark/close | Corrections with reason, timezone-safe behavior, daily/student reports and UI aggregate contract |
 | Finance | Schema work planned | Blocked until finance decisions in backend planning are approved; no financial APIs should be fabricated |
 | Academic workflows | Schema/domain foundations exist | Assignment lifecycle, submissions/grading, grade/report workflows and role-scoped access |
-| Dashboards | Frontend mock dashboards exist; backend plan says schema only | Role-specific aggregates, performance requirements, cache/refresh semantics, endpoint contracts |
-| Reports | Frontend mock reports exist | Report definitions, generation/export lifecycle, authorization, and API endpoints |
+| Dashboards | School-admin `GET /api/v1/dashboard` returns active student/staff/class/section counts with `dashboard.read` and active-school scoping | Teacher, parent, principal, and platform aggregates; attendance/finance metrics; performance and cache/refresh semantics remain gated |
+| Reports | School-admin `GET /api/v1/reports/attendance` returns closed-session counts for an inclusive date range | Other report types, CSV/PDF exports, student-level detail, and performance reports remain gated |
 | Communications | Schema includes announcement/notification-related models | Announcement and notification APIs, delivery/read state, user preferences |
 | Files/documents | Schema includes file object model | Private storage adapter, upload/download authorization, malware/content policy, object-level checks |
 | Operations | Health endpoints and logging foundations | Backups/restore drill, operational alerting, storage adapter, staging/UAT/release readiness |
@@ -50,8 +50,8 @@
 
 ### P2 — Role workspaces and reporting
 
-- Backend dashboard aggregates per approved role/workspace.
-- Reports and academic assignment/submission workflows.
+- Backend dashboard aggregates per approved role/workspace; the first school-admin current-count slice is implemented and documented in the [dashboard contract](../api-contracts/dashboard.openapi.yaml).
+- Remaining report types/exports and academic assignment/submission workflows.
 - Parent/student-specific linked-record APIs with object-level authorization.
 - Announcement/notification APIs.
 

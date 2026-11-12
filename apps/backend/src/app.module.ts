@@ -13,6 +13,9 @@ import { AcademicModule } from "./modules/academic/academic.module";
 import { StudentsModule } from "./modules/students/students.module";
 import { AttendanceModule } from "./modules/attendance/attendance.module";
 import { AuditModule } from "./modules/audit/audit.module";
+import { StaffModule } from "./modules/staff/staff.module";
+import { DashboardModule } from "./modules/dashboard/dashboard.module";
+import { ReportsModule } from "./modules/reports/reports.module";
 import { CsrfGuard } from "./common/guards/csrf.guard";
 
 @Module({
@@ -59,6 +62,9 @@ import { CsrfGuard } from "./common/guards/csrf.guard";
     AcademicModule,
     StudentsModule,
     AttendanceModule,
+    StaffModule,
+    DashboardModule,
+    ReportsModule,
     AuditModule,
   ],
   providers: [

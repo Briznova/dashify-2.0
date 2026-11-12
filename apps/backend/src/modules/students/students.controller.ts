@@ -5,6 +5,7 @@ import {
   Param,
   ParseIntPipe,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Req,
@@ -16,6 +17,7 @@ import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermissions } from "../../common/decorators/permissions.decorator";
 import { AuthenticatedRequest } from "../../common/interfaces/authenticated-request";
 import { CreateStudentDto } from "./dto/create-student.dto";
+import { UpdateStudentDto } from "./dto/update-student.dto";
 import { StudentsService } from "./students.service";
 
 @ApiTags("students")
@@ -98,6 +100,18 @@ export class StudentsController {
   })
   create(@Req() req: AuthenticatedRequest, @Body() dto: CreateStudentDto) {
     return this.students.create(this.school(req), req.user.id, dto);
+  }
+
+  @Patch(":id")
+  @RequirePermissions("students.update")
+  @ApiOperation({ summary: "Update a student record and guardians" })
+  @ApiBody({ type: UpdateStudentDto })
+  update(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateStudentDto,
+  ) {
+    return this.students.update(this.school(req), id, dto);
   }
 
   @Post(":id/archive")

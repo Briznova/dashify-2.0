@@ -46,7 +46,7 @@ const apiAccessByCapability: Record<
   overview: { permissions: [], adapterReady: true },
   schools: null,
   students: { permissions: ["students.read"], adapterReady: true },
-  staff: null,
+  staff: { permissions: ["staff.read"], adapterReady: true },
   classes: {
     permissions: ["academic_structure.read"],
     adapterReady: true,
@@ -58,7 +58,7 @@ const apiAccessByCapability: Record<
   fees: null,
   academics: { permissions: ["academic_structure.read"], adapterReady: true },
   analytics: null,
-  reports: null,
+  reports: { permissions: ["reports.read"], adapterReady: true },
   "teaching-day": null,
   "finance-overview": null,
   child: null,

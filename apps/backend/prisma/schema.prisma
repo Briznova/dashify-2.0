@@ -91,6 +91,7 @@ model School {
   academicYears AcademicYear[]
   classes     SchoolClass[]
   staff       StaffProfile[]
+  teacherAssignments TeacherAssignment[]
   students    Student[]
   guardians   Guardian[]
   attendanceSessions AttendanceSession[]
@@ -242,6 +243,7 @@ model SchoolClass {
   school    School @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   sections  Section[]
   attendanceSessions AttendanceSession[]
+  teacherAssignments TeacherAssignment[]
 
   @@unique([schoolId, code])
   @@index([schoolId, sortOrder])
@@ -261,6 +263,7 @@ model Section {
   class     SchoolClass @relation(fields: [classId], references: [id], onDelete: Restrict)
   enrolments StudentEnrolment[]
   attendanceSessions AttendanceSession[]
+  teacherAssignments TeacherAssignment[]
 
   @@unique([classId, code])
   @@index([schoolId, classId])
@@ -271,6 +274,10 @@ model StaffProfile {
   id        String @id @default(uuid()) @db.Uuid
   schoolId  String @db.Uuid @map("school_id")
   userId    String? @db.Uuid @map("user_id")
+  firstName String? @map("first_name")
+  lastName  String? @map("last_name")
+  email     String? @map("email")
+  phone     String? @map("phone")
   employeeCode String? @map("employee_code")
   designation String?
   department String?
@@ -279,10 +286,33 @@ model StaffProfile {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   school    School @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  teacherAssignments TeacherAssignment[]
 
   @@unique([schoolId, employeeCode])
   @@index([schoolId, isActive])
   @@map("staff_profiles")
+}
+
+model TeacherAssignment {
+  id        String @id @default(uuid()) @db.Uuid
+  schoolId  String @db.Uuid @map("school_id")
+  staffId   String @db.Uuid @map("staff_id")
+  classId   String @db.Uuid @map("class_id")
+  sectionId String? @db.Uuid @map("section_id")
+  subject   String?
+  isActive  Boolean @default(true) @map("is_active")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  school    School @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  staff     StaffProfile @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  class     SchoolClass @relation(fields: [classId], references: [id], onDelete: Restrict)
+  section   Section? @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+
+  @@unique([schoolId, staffId, classId, sectionId])
+  @@index([schoolId, classId, sectionId])
+  @@index([schoolId, staffId, isActive])
+  @@map("teacher_assignments")
 }
 
 model Student {

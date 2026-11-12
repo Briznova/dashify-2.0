@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -23,6 +24,7 @@ export class CreateSectionDto {
     maxLength: 40,
   })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(40)
   name!: string;
 
@@ -32,6 +34,7 @@ export class CreateSectionDto {
     maxLength: 20,
   })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(20)
   code!: string;
 

@@ -1,11 +1,15 @@
 import type {
   AcademicYear,
+  AttendanceReport,
   AttendanceRosterStudent,
   AttendanceSession,
+  CreateAcademicSectionInput,
   CreateAcademicYearInput,
+  CreateClassroomInput,
   AcademicReport,
   Assignment,
   AttendanceRecord,
+  AcademicSection,
   Classroom,
   FeeRecord,
   PortalOverview,
@@ -35,8 +39,11 @@ export interface SchoolService {
   createAcademicYear(input: CreateAcademicYearInput): Promise<AcademicYear>;
   getStaff(signal?: AbortSignal): Promise<StaffMember[]>;
   getClassrooms(signal?: AbortSignal): Promise<Classroom[]>;
+  createClassroom(input: CreateClassroomInput): Promise<Classroom>;
+  createAcademicSection(input: CreateAcademicSectionInput): Promise<AcademicSection>;
   getSchools(signal?: AbortSignal): Promise<School[]>;
   getAttendance(signal?: AbortSignal): Promise<AttendanceRecord[]>;
+  getAttendanceReport(fromDate: string, toDate: string, signal?: AbortSignal): Promise<AttendanceReport>;
   getAttendanceSessions(date: string, signal?: AbortSignal): Promise<AttendanceSession[]>;
   getAttendanceRoster(sessionId: string, signal?: AbortSignal): Promise<AttendanceRosterStudent[]>;
   createAttendanceSession(input: { classId: string; sectionId: string; date: string }): Promise<AttendanceSession>;

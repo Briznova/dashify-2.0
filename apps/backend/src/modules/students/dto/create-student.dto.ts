@@ -17,6 +17,15 @@ import {
 import { Gender, GuardianRelationship } from "@prisma/client";
 
 export class GuardianInput {
+  @ApiPropertyOptional({
+    description: "Guardian record ID when updating an existing guardian relationship.",
+    format: "uuid",
+    example: "77777777-7777-4777-8777-777777777777",
+  })
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
   @ApiProperty({
     description: "First name of the guardian.",
     example: "Priya",

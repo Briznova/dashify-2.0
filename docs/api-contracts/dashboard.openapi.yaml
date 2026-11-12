@@ -1,0 +1,80 @@
+openapi: 3.0.3
+info:
+  title: DASHIFY School Administrator Dashboard Contract
+  version: 1.0.0
+  description: >
+    Approved first dashboard slice. This contract covers current active counts
+    for school administrators only; other roles and trend/period metrics remain
+    out of scope.
+servers:
+  - url: http://localhost:3001/api/v1
+    description: Local development URL
+tags:
+  - name: Dashboard
+paths:
+  /dashboard:
+    get:
+      tags: [Dashboard]
+      operationId: getSchoolAdminDashboard
+      summary: Get current KPI counts for the active school
+      description: >
+        Requires an authenticated school-administrator session with an active
+        school context and the dashboard.read permission. School scope is
+        derived from the session; no role or school identifier is accepted
+        from the client.
+      security:
+        - accessCookie: []
+      responses:
+        "200":
+          description: Current counts for the active school
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchoolAdminDashboard"
+        "400":
+          description: The session has no active school context
+        "401":
+          description: Authentication is required
+        "403":
+          description: The session lacks dashboard.read
+        "404":
+          description: The active school is missing or inactive
+components:
+  securitySchemes:
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: dashify_access
+  schemas:
+    SchoolAdminDashboard:
+      type: object
+      additionalProperties: false
+      required:
+        - schoolId
+        - schoolName
+        - activeStudentCount
+        - activeStaffCount
+        - activeClassCount
+        - activeSectionCount
+      properties:
+        schoolId:
+          type: string
+          format: uuid
+        schoolName:
+          type: string
+        activeStudentCount:
+          type: integer
+          minimum: 0
+          description: Students with ACTIVE status in the active school.
+        activeStaffCount:
+          type: integer
+          minimum: 0
+          description: Active staff profiles in the active school.
+        activeClassCount:
+          type: integer
+          minimum: 0
+          description: Active classes in the active school.
+        activeSectionCount:
+          type: integer
+          minimum: 0
+          description: Active sections belonging to active classes in the active school.

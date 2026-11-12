@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiClient } from "@/services/api-client";
+import { ApiClient, ApiError } from "@/services/api-client";
 import { HttpSchoolService } from "@/services/http/http-school-service";
 
 const studentResponse = {
@@ -109,6 +109,79 @@ describe("HttpSchoolService.getClassrooms", () => {
     );
   });
 
+  describe("HttpSchoolService.getOverview", () => {
+    it("requests and maps only the school-admin current-count contract", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({
+          schoolId: "44009a3e-5693-4f11-9891-b5e34f4d02c6",
+          schoolName: "Northstar School",
+          activeStudentCount: 1234,
+          activeStaffCount: 35,
+          activeClassCount: 8,
+          activeSectionCount: 19,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+
+      await expect(service.getOverview("school_admin")).resolves.toEqual({
+        role: "school_admin",
+        schoolName: "Northstar School",
+        metrics: [
+          { label: "Active students", value: "1,234", icon: "users", tone: "blue" },
+          { label: "Active staff", value: "35", icon: "graduationCap", tone: "violet" },
+          { label: "Active classes", value: "8", icon: "book", tone: "green" },
+          { label: "Active sections", value: "19", icon: "layoutDashboard", tone: "orange" },
+        ],
+        enrollment: [],
+        pendingApprovals: [],
+        upcomingEvents: [],
+      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://dashify.test/api/v1/dashboard",
+        expect.objectContaining({ credentials: "include" }),
+      );
+    });
+
+    it.each(["super_admin", "principal"] as const)(
+      "does not request unapproved dashboard metrics for %s",
+      async (role) => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal("fetch", fetchMock);
+        const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+
+        await expect(service.getOverview(role)).rejects.toMatchObject({
+          status: 501,
+          message: "Dashboard data is not available for this role yet.",
+        });
+        expect(fetchMock).not.toHaveBeenCalled();
+      },
+    );
+
+    it("rejects malformed or negative aggregate counts", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({
+          schoolId: "44009a3e-5693-4f11-9891-b5e34f4d02c6",
+          schoolName: "Northstar School",
+          activeStudentCount: -1,
+          activeStaffCount: 35,
+          activeClassCount: 8,
+          activeSectionCount: 19,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+
+      await expect(service.getOverview("school_admin")).rejects.toBeInstanceOf(ApiError);
+    });
+  });
+
   it("rejects malformed backend responses explicitly", async () => {
     vi.stubGlobal(
       "fetch",
@@ -123,6 +196,99 @@ describe("HttpSchoolService.getClassrooms", () => {
 
     await expect(service.getClassrooms()).rejects.toMatchObject({
       message: "The Dashify service returned invalid data for class 1.",
+      status: 502,
+    });
+  });
+
+  it("posts a class payload and maps the created class", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "c99a0e44-61f3-4dcc-ae23-fd24ed0428c6",
+          name: "Grade 8",
+          code: "G8",
+          sortOrder: 8,
+          isActive: true,
+        }),
+        { status: 201, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+    const input = { name: "Grade 8", code: "G8", sortOrder: 8 };
+
+    await expect(service.createClassroom(input)).resolves.toEqual({
+      id: "c99a0e44-61f3-4dcc-ae23-fd24ed0428c6",
+      ...input,
+      isActive: true,
+      sections: [],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://dashify.test/api/v1/classes",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(input),
+        credentials: "include",
+      }),
+    );
+  });
+
+  it("posts a section payload and maps the created section", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
+          classId: "c99a0e44-61f3-4dcc-ae23-fd24ed0428c6",
+          name: "Section A",
+          code: "A",
+          capacity: 30,
+          isActive: true,
+        }),
+        { status: 201, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+    const input = {
+      classId: "c99a0e44-61f3-4dcc-ae23-fd24ed0428c6",
+      name: "Section A",
+      code: "A",
+      capacity: 30,
+    };
+
+    await expect(service.createAcademicSection(input)).resolves.toEqual({
+      id: "034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
+      name: "Section A",
+      code: "A",
+      capacity: 30,
+      isActive: true,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://dashify.test/api/v1/sections",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(input),
+        credentials: "include",
+      }),
+    );
+  });
+
+  it("rejects malformed class creation responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ id: "not-a-class" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+
+    await expect(
+      service.createClassroom({ name: "Grade 8", code: "G8" }),
+    ).rejects.toMatchObject({
+      message: "The Dashify service returned invalid created-class data.",
       status: 502,
     });
   });
@@ -157,8 +323,11 @@ describe("HttpSchoolService.getClassrooms", () => {
             gender: "MALE",
             admissionDate: "2026-04-01T00:00:00.000Z",
             academicYearName: "2026-2027",
+            academicYearId: "11111111-1111-4111-8111-111111111111",
             className: "Grade 8",
+            classId: "22222222-2222-4222-8222-222222222222",
             sectionName: "Section A",
+            sectionId: "034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
             guardians: [],
           },
         ],
@@ -214,6 +383,48 @@ describe("HttpSchoolService.getClassrooms", () => {
           },
         ],
       });
+  });
+
+  it("requests and maps the backend staff directory to the dashboard contract", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            id: "9eb4d4b6-d7b3-4d6d-9165-4f2fef5b4563",
+            schoolId: "44009a3e-5693-4f11-9891-b5e34f4d02c6",
+            firstName: "Mia",
+            lastName: "Robinson",
+            email: "mia.robinson@northstar.edu",
+            phone: "+1-555-010-7788",
+            employeeCode: "EMP-101",
+            designation: "Math Teacher",
+            department: "Mathematics",
+            isActive: true,
+            joinedAt: "2025-01-01T00:00:00.000Z",
+            userId: null,
+            teacherAssignments: [],
+          },
+        ]),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+
+    await expect(service.getStaff()).resolves.toEqual([
+      {
+        id: "9eb4d4b6-d7b3-4d6d-9165-4f2fef5b4563",
+        name: "Mia Robinson",
+        email: "mia.robinson@northstar.edu",
+        position: "Math Teacher",
+        department: "Mathematics",
+        status: "Active",
+      },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://dashify.test/api/v1/staff",
+      expect.objectContaining({ credentials: "include" }),
+    );
   });
 
   it("sends the backend create-student contract and maps its response", async () => {

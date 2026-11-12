@@ -12,6 +12,11 @@ export type SchoolMetric = {
   tone: "blue" | "violet" | "green" | "orange";
 };
 
+export type DashboardMetric = Omit<SchoolMetric, "change" | "positive"> & {
+  change?: string;
+  positive?: boolean;
+};
+
 export type EnrollmentPoint = {
   month: string;
   students: number;
@@ -36,7 +41,7 @@ export type SchoolEvent = {
 export type SchoolOverview = {
   role: SchoolRole;
   schoolName: string;
-  metrics: SchoolMetric[];
+  metrics: DashboardMetric[];
   enrollment: EnrollmentPoint[];
   pendingApprovals: PendingApproval[];
   upcomingEvents: SchoolEvent[];
@@ -57,8 +62,11 @@ export type Student = {
   gender?: string | null;
   admissionDate?: string;
   academicYearName?: string | null;
+  academicYearId?: string | null;
   className?: string | null;
+  classId?: string | null;
   sectionName?: string | null;
+  sectionId?: string | null;
   guardians?: StudentGuardian[];
 };
 
@@ -81,6 +89,16 @@ export type StudentPage = {
   };
 };
 
+export type StudentGuardianInput = {
+  id?: string;
+  firstName: string;
+  lastName?: string;
+  relationship: "FATHER" | "MOTHER" | "GUARDIAN" | "GRANDPARENT" | "OTHER";
+  phone: string;
+  email?: string;
+  isPrimary: boolean;
+};
+
 export type StudentCreateInput = {
   admissionNumber: string;
   firstName: string;
@@ -92,21 +110,14 @@ export type StudentCreateInput = {
   academicYearId: string;
   classId: string;
   sectionId: string;
-  guardians: {
-    firstName: string;
-    lastName?: string;
-    relationship: "FATHER" | "MOTHER" | "GUARDIAN" | "GRANDPARENT" | "OTHER";
-    phone: string;
-    email?: string;
-    isPrimary: boolean;
-  }[];
+  guardians: StudentGuardianInput[];
 };
 
-export type StudentInput = {
-  name: string;
-  studentNumber: string;
-  grade: string;
-  guardian: string;
+export type StudentInput = Partial<StudentCreateInput> & {
+  name?: string;
+  studentNumber?: string;
+  grade?: string;
+  guardian?: string;
 };
 
 export type AcademicYear = {
@@ -146,6 +157,14 @@ export type AttendanceSessionRecord = {
   markedAt: string | null;
 };
 
+export type AttendanceReport = {
+  fromDate: string;
+  toDate: string;
+  totalSessions: number;
+  totalRecords: number;
+  statusCounts: Record<AttendanceSessionRecord["status"], number>;
+};
+
 export type AttendanceRosterStudent = {
   id: string;
   name: string;
@@ -179,12 +198,24 @@ export type Classroom = {
   sections: AcademicSection[];
 };
 
+export type CreateClassroomInput = Pick<Classroom, "name" | "code"> & {
+  sortOrder?: number;
+};
+
 export type AcademicSection = {
   id: string;
   name: string;
   code: string;
   capacity: number | null;
   isActive: boolean;
+};
+
+export type CreateAcademicSectionInput = Pick<
+  AcademicSection,
+  "name" | "code"
+> & {
+  classId: string;
+  capacity?: number;
 };
 
 export type School = {

@@ -83,6 +83,100 @@ export class StudentsService {
       return tx.student.findUniqueOrThrow({ where: { id: student.id }, include: { guardians: { include: { guardian: true } }, enrolments: true } });
     });
   }
+
+  async update(schoolId: string, id: string, dto: Partial<CreateStudentDto>) {
+    return this.prisma.withTenant(schoolId, async (tx) => {
+      const student = await tx.student.findFirst({
+        where: { id, schoolId },
+        include: { guardians: { include: { guardian: true } }, enrolments: true },
+      });
+      if (!student) throw new NotFoundException('Student not found');
+
+      if (dto.admissionNumber && dto.admissionNumber !== student.admissionNumber) {
+        const duplicate = await tx.student.findFirst({
+          where: { schoolId, admissionNumber: dto.admissionNumber, id: { not: id } },
+        });
+        if (duplicate) throw new ConflictException('Admission number already exists');
+      }
+
+      let updatedStudent = student;
+      if (Object.keys(dto).length > 0) {
+        const { guardians, ...studentData } = dto;
+        updatedStudent = await tx.student.update({
+          where: { id },
+          data: {
+            ...studentData,
+            ...(studentData.dateOfBirth !== undefined
+              ? { dateOfBirth: studentData.dateOfBirth ? new Date(studentData.dateOfBirth) : null }
+              : {}),
+            ...(studentData.admissionDate !== undefined
+              ? { admissionDate: new Date(studentData.admissionDate) }
+              : {}),
+          },
+          include: { guardians: { include: { guardian: true } }, enrolments: true },
+        });
+      }
+
+      if (dto.guardians !== undefined) {
+        const incomingGuardianIds = dto.guardians.filter((guardian) => guardian.id).map((guardian) => guardian.id as string);
+        const toRemove = updatedStudent.guardians.filter((link) => !incomingGuardianIds.includes(link.guardianId));
+        if (toRemove.length > 0) {
+          await tx.studentGuardian.deleteMany({
+            where: { schoolId, studentId: id, guardianId: { in: toRemove.map((link) => link.guardianId) } },
+          });
+        }
+
+        for (const guardianInput of dto.guardians) {
+          if (guardianInput.id) {
+            const existingLink = updatedStudent.guardians.find((link) => link.guardianId === guardianInput.id);
+            if (existingLink) {
+              await tx.guardian.update({
+                where: { id: guardianInput.id },
+                data: {
+                  firstName: guardianInput.firstName,
+                  lastName: guardianInput.lastName,
+                  phone: guardianInput.phone,
+                  email: guardianInput.email,
+                },
+              });
+              await tx.studentGuardian.update({
+                where: { studentId_guardianId: { studentId: id, guardianId: guardianInput.id } },
+                data: { relationship: guardianInput.relationship, isPrimary: guardianInput.isPrimary ?? false },
+              });
+              continue;
+            }
+          }
+
+          const guardian = await tx.guardian.create({
+            data: {
+              schoolId,
+              firstName: guardianInput.firstName,
+              lastName: guardianInput.lastName,
+              phone: guardianInput.phone,
+              email: guardianInput.email,
+            },
+          });
+          await tx.studentGuardian.create({
+            data: {
+              schoolId,
+              studentId: id,
+              guardianId: guardian.id,
+              relationship: guardianInput.relationship,
+              isPrimary: guardianInput.isPrimary ?? false,
+            },
+          });
+        }
+
+        return tx.student.findUniqueOrThrow({
+          where: { id },
+          include: { guardians: { include: { guardian: true } }, enrolments: true },
+        });
+      }
+
+      return updatedStudent;
+    });
+  }
+
   async archive(schoolId: string, actorId: string, id: string) {
     return this.prisma.withTenant(schoolId, async (tx) => {
       const result = await tx.student.updateMany({ where: { id, schoolId, status: { not: 'ARCHIVED' } }, data: { status: 'ARCHIVED', archivedAt: new Date() } });

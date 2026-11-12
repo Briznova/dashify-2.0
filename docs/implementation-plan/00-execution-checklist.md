@@ -111,7 +111,7 @@ Phase 3 implementation evidence (2026-11-12): 54 frontend tests, lint, TypeScrip
 
 ### 4.1 School profile and academic structure
 
-- [x] Scope the slice to school profile read/update, academic-year list/create, and read-only class/section listing; defer class/section writes.
+- [x] Scope the Phase 4 baseline to school profile read/update, academic-year list/create, and read-only class/section listing; class/section writes were deferred and later delivered as a Phase 5 slice.
 - [x] Align frontend models/adapters and API-mode screens with school-profile and academic-year responses.
 - [x] Align the class frontend adapter and response mapping with `GET /api/v1/classes`; enable the capability only after the real class view is connected.
 - [x] Add frontend adapter tests for class, school profile, academic-year, and attendance routes and request shapes.
@@ -123,7 +123,7 @@ Phase 3 implementation evidence (2026-11-12): 54 frontend tests, lint, TypeScrip
 - [x] Scope this slice to paginated list, detail, and create; create requires an academic year/class/active section and supports up to five optional guardians.
 - [x] Align frontend list/detail/create adapters and response mapping to `/students` before exposing student reads in API mode.
 - [x] Align the create form to backend DTO fields and IDs, loading academic years and classes from their read endpoints; route access requires both `students.create` and `academic_structure.read`.
-- [x] Defer update (no backend endpoint), archive, server-side search, and documents; hide unsupported edit UI in API mode.
+- [x] Defer update, archive, server-side search, and documents at the Phase 4 baseline; student editing / guardian lifecycle was later delivered as a separate Phase 5 slice.
 - [x] Add frontend adapter and form tests for pagination, student mapping, guardian detail, and create request shape.
 - [x] Add/run backend service tests for school-scoped student reads and same-school academic references.
 - [x] Verify controller read/create permission guards and request DTO validation in dedicated tests.
@@ -138,17 +138,30 @@ Phase 3 implementation evidence (2026-11-12): 54 frontend tests, lint, TypeScrip
 
 ## Phase 5 — Prioritize and implement remaining capabilities
 
-**Status:** Not started; individual features require approved specs  
+**Status:** In progress — staff/teacher assignment, student editing, class/section creation, school-admin dashboard, and the first attendance-report slice are complete; remaining items stay decision-gated
 **Reference:** [Backend capability backlog](./05-backend-capability-backlog.md)
 
-- [ ] Product confirms release scope and priority for staff/teacher assignment.
-- [ ] Product confirms dashboard aggregates and role-specific data requirements.
-- [ ] Product confirms reports and academic assignment/submission workflows.
+- [x] Product confirms release scope and priority for staff/teacher assignment.
+- [x] Implement the approved staff/teacher-assignment vertical slice across backend, permissions, and API-mode frontend integration.
+- [x] Approve and implement student editing / guardian lifecycle as a separate school-scoped slice.
+- [x] Approve and implement class/section creation; defer edits, deactivation, and deletion.
+- [x] Product approves the school-administrator dashboard count slice; other role-specific data requirements remain open.
+- [x] Implement the approved school-administrator current-count dashboard slice across backend and API-mode frontend.
+- [x] Product approves the first school-admin attendance-report slice.
+- [x] Implement the read-only date-range attendance report for closed sessions; defer exports and other report types.
+- [ ] Product confirms remaining report types, export formats, and retention.
+- [ ] Product confirms academic assignment/submission workflows.
 - [ ] Product confirms parent/student linked-record and object-access requirements.
 - [ ] Product confirms announcements and notifications.
 - [ ] Approve finance workflows before implementing fees/payments.
 - [ ] Approve storage/provider and document-access lifecycle before implementing files.
 - [ ] For each approved capability, implement one tested vertical slice and update specs/contracts.
+
+Phase 5 implementation evidence (2026-11-12): Class and section creation uses the active-school context, `academic_structure.manage`, duplicate-code conflict handling, and audit events. Frontend: 16 focused tests, TypeScript, targeted ESLint, and production build passed. Backend: 12 focused tests, typecheck, and build passed. No live API/database integration was run.
+
+Phase 5 dashboard scope decision: the user approved proceeding with the next dashboard item. The first slice is limited to school-administrator counts for active students, staff profiles, classes, and sections; the active school is derived from the authenticated session. Teacher, parent, principal, and platform dashboards, trends, attendance, finance, and caching remain gated for separate decisions.
+
+Phase 5 report scope decision: the user approved the first school-admin attendance-report slice. It returns aggregate status counts for closed sessions over an inclusive date range, with no student-level data or export; other report types and academic assignment/submission workflows remain open.
 
 ## Phase 6 — Security hardening, staging, and release
 
@@ -173,7 +186,10 @@ Phase 3 implementation evidence (2026-11-12): 54 frontend tests, lint, TypeScrip
 | 2026-11-12 | 0.1 — Toolchain | Both repos use npm (`package-lock.json`, lockfile v3); both READMEs say `npm install`. Current environment: Node 24.20.0, npm 11.19.0. Backend declares Node >=20 and README requires npm 10+; frontend does not pin Node/npm. `npm.cmd` works in PowerShell; `npm` is blocked by local script execution policy. No dependencies installed. | Copilot |
 | 2026-11-12 | 0.1 — Environment/dependencies | Backend env template names include `DATABASE_URL`, `DIRECT_URL`, auth secrets, API/CORS/runtime settings, and storage settings; no secret values copied. Backend README requires PostgreSQL 16 via Docker Compose. Docker is installed; neither repo has `node_modules`; no `.env`/`.env.local` files exist. Frontend README references `.env.example`, but that file is absent. Backend Compose publishes PostgreSQL on host port 5433 while the env template DB URLs specify localhost:5432; resolve in the ports/config task before starting DB. Docker/services were not started. | Copilot |
 | 2026-11-12 | 4.2 — Student list/detail/create | Frontend adapter/form tests (student list pagination, detail guardian mapping, create body, academic-year endpoint), 61 frontend tests, lint, type-check, and production build passed. Backend student service tests passed (8 tests), including cross-school reads and rejected cross-school/missing academic-year, class, and section references. Controller permission-guard/DTO validation tests remain open. No live API/database integration was run. | Copilot |
+| 2026-11-12 | 5.0 — Staff/teacher assignment approval | Product approved the Phase 5 staff/teacher-assignment slice. Backend staff schema, permission keys, and list/create/assignment endpoints were added and route-validation coverage was recorded. | Copilot |
 | 2026-11-12 | Phase 4 — School profile, academic years, and attendance | Added active-school profile read/update, academic-year list/create, timezone-derived attendance dates, session list/create/roster/mark/close, and a tenant-scoped roster endpoint. Existing attendance records are immutable through the mark route; correction workflow remains deferred. Frontend adapter coverage and backend tenant/permission/DTO tests added. Frontend: 64 tests, lint, TypeScript, and production build passed. Backend: 38 tests, typecheck, and build passed. No live API/database integration was run. | Copilot |
+| 2026-11-12 | Phase 5 — School administrator dashboard | Added tenant-scoped active counts with `dashboard.read`, the API-mode KPI adapter/rendering, and the dashboard contract. Backend: 4 focused tests, typecheck, and build passed; frontend: 18 focused tests, targeted ESLint, TypeScript, and production build passed. No live API/database integration was run. | Copilot |
+| 2026-11-12 | Phase 5 — School attendance report | Added the tenant-scoped closed-session attendance aggregate endpoint and API-mode date-range report UI. Backend: 10 focused tests including attendance regression, typecheck, build, and report-file formatting passed; frontend: 57 focused tests, targeted ESLint, typecheck, and production build passed. No live API/database integration was run. | Copilot |
 
 ## Blockers / decisions needed
 

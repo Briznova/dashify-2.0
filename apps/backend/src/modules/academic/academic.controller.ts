@@ -51,7 +51,7 @@ export class AcademicController {
   @ApiOperation({ summary: "Create a class for the active school" })
   @ApiBody({ type: CreateClassDto })
   createClass(@Req() req: AuthenticatedRequest, @Body() dto: CreateClassDto) {
-    return this.academic.createClass(this.school(req), dto);
+    return this.academic.createClass(this.school(req), req.user.id, dto);
   }
 
   @Post("sections")
@@ -62,6 +62,6 @@ export class AcademicController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: CreateSectionDto,
   ) {
-    return this.academic.createSection(this.school(req), dto);
+    return this.academic.createSection(this.school(req), req.user.id, dto);
   }
 }
