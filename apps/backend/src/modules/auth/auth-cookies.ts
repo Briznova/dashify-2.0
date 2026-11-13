@@ -1,5 +1,6 @@
 import type { ConfigService } from "@nestjs/config";
 import type { Response } from "express";
+import { getAuthTokenTtls } from "./auth-token-ttls";
 
 export const ACCESS_COOKIE = "dashify_access";
 export const REFRESH_COOKIE = "dashify_refresh";
@@ -28,8 +29,7 @@ export function setAuthCookies(
   config: ConfigService,
 ): void {
   const baseOptions = cookieOptions(config);
-  const accessTtl = Number(config.get("ACCESS_TOKEN_TTL_SECONDS", 900));
-  const refreshTtl = Number(config.get("REFRESH_TOKEN_TTL_SECONDS", 2_592_000));
+  const { accessTokenTtlSeconds: accessTtl, refreshTokenTtlSeconds: refreshTtl } = getAuthTokenTtls(config);
 
   response.cookie(ACCESS_COOKIE, credentials.accessToken, {
     ...baseOptions,

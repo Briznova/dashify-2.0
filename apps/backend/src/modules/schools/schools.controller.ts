@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Patch, Req, UseGuards } from "@nestjs/common";
-import { ApiBody, ApiCookieAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Body, Controller, ForbiddenException, Get, Header, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { ApiBody, ApiCookieAuth, ApiHeader, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RequirePermissions } from "../../common/decorators/permissions.decorator";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
@@ -31,5 +31,29 @@ export class SchoolsController {
     if (!req.user.activeSchoolId)
       throw new Error("Select an active school first");
     return this.schools.updateCurrent(req.user.activeSchoolId, dto);
+  }
+
+  private onboardingSchool(req: AuthenticatedRequest): string {
+    if (req.user.scope !== "school" || req.user.activeWorkspaceRole !== "school_admin" || !req.user.activeSchoolId) {
+      throw new ForbiddenException();
+    }
+    return req.user.activeSchoolId;
+  }
+
+  @Get("current/onboarding")
+  @Header("Cache-Control", "no-store")
+  @RequirePermissions("school.update")
+  @ApiOperation({ summary: "Read onboarding confirmation and prerequisites for the active School Admin workspace" })
+  onboarding(@Req() req: AuthenticatedRequest) {
+    return this.schools.getOnboarding(this.onboardingSchool(req));
+  }
+
+  @Post("current/onboarding/complete")
+  @Header("Cache-Control", "no-store")
+  @RequirePermissions("school.update")
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiOperation({ summary: "Confirm onboarding once academic structure prerequisites exist" })
+  completeOnboarding(@Req() req: AuthenticatedRequest) {
+    return this.schools.completeOnboarding(this.onboardingSchool(req), req.user.id);
   }
 }

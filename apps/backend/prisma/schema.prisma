@@ -66,6 +66,33 @@ enum AuthScope {
   SCHOOL
 }
 
+enum SchoolOnboardingStatus {
+  NOT_STARTED
+  COMPLETED
+}
+
+enum PlatformPermission {
+  SCHOOLS_CREATE
+  SCHOOL_ADMINS_CREATE
+  AUDIT_READ
+  SETTINGS_READ
+  SUPPORT_READ
+  SUPPORT_UPDATE
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum SupportTicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
 enum NotificationType {
   GENERAL
   ATTENDANCE
@@ -104,6 +131,8 @@ model School {
   announcements Announcement[]
   auditLogs   AuditLog[]
   fileObjects FileObject[]
+  onboardingState SchoolOnboardingState?
+  supportTickets PlatformSupportTicket[]
 
   @@map("schools")
 }
@@ -124,6 +153,9 @@ model User {
   passwordResetTokens PasswordResetToken[]
   notifications Notification[]
   platformAdminGrant PlatformAdminGrant?
+  createdSupportTickets PlatformSupportTicket[] @relation("SupportTicketCreator")
+  assignedSupportTickets PlatformSupportTicket[] @relation("SupportTicketAssignee")
+  supportTicketEvents PlatformSupportTicketEvent[]
 
   @@map("users")
 }
@@ -195,9 +227,72 @@ model PlatformAdminGrant {
   grantedAt DateTime  @default(now()) @map("granted_at")
   revokedAt DateTime? @map("revoked_at")
   user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  permissions PlatformAdminGrantPermission[]
 
   @@index([revokedAt])
   @@map("platform_admin_grants")
+}
+
+model PlatformAdminGrantPermission {
+  id         String             @id @default(uuid()) @db.Uuid
+  grantId    String             @map("grant_id") @db.Uuid
+  permission PlatformPermission
+  grantedAt  DateTime           @default(now()) @map("granted_at")
+  revokedAt  DateTime?          @map("revoked_at")
+  grant      PlatformAdminGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+
+  @@unique([grantId, permission])
+  @@index([revokedAt])
+  @@map("platform_admin_grant_permissions")
+}
+
+model SchoolOnboardingState {
+  id        String                     @id @default(uuid()) @db.Uuid
+  schoolId  String                     @unique @map("school_id") @db.Uuid
+  status    SchoolOnboardingStatus     @default(NOT_STARTED)
+  createdAt DateTime                   @default(now()) @map("created_at")
+  updatedAt DateTime                   @updatedAt @map("updated_at")
+  school    School                     @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+
+  @@map("school_onboarding_states")
+}
+
+model PlatformSupportTicket {
+  id          String                @id @default(uuid()) @db.Uuid
+  schoolId    String                @map("school_id") @db.Uuid
+  title       String                @db.VarChar(120)
+  description String                @db.VarChar(4000)
+  status      SupportTicketStatus   @default(OPEN)
+  priority    SupportTicketPriority @default(NORMAL)
+  createdById String                @map("created_by_id") @db.Uuid
+  assigneeId  String?               @map("assignee_id") @db.Uuid
+  version     Int                   @default(1)
+  resolvedAt  DateTime?             @map("resolved_at")
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+  school      School                @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  createdBy   User                  @relation("SupportTicketCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  assignee    User?                 @relation("SupportTicketAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
+  events      PlatformSupportTicketEvent[]
+
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@index([status, resolvedAt])
+  @@map("platform_support_tickets")
+}
+
+model PlatformSupportTicketEvent {
+  id          String                @id @default(uuid()) @db.Uuid
+  ticketId    String                @map("ticket_id") @db.Uuid
+  actorUserId String                @map("actor_user_id") @db.Uuid
+  action      String                @db.VarChar(32)
+  fromValue   String?               @map("from_value") @db.VarChar(64)
+  toValue     String?               @map("to_value") @db.VarChar(64)
+  createdAt   DateTime              @default(now()) @map("created_at")
+  ticket      PlatformSupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor       User                  @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("platform_support_ticket_events")
 }
 
 model RefreshToken {

@@ -1,0 +1,8 @@
+.page { display: grid; gap: 18px; }
+.back { color: #3566e8; font-size: 13px; font-weight: 600; }
+.form { display: grid; max-width: 520px; gap: 16px; margin-top: 20px; }
+.form label { display: grid; gap: 6px; color: #414960; font-size: 13px; font-weight: 600; }
+.form input, .form select { width: 100%; padding: 10px 12px; border: 1px solid #dfe3ef; border-radius: 7px; background: #fff; }
+.form button { justify-self: start; padding: 10px 16px; border: 0; border-radius: 6px; background: #3566e8; color: #fff; font-weight: 600; cursor: pointer; }
+.form button:disabled { opacity: .6; cursor: not-allowed; }
+.error { margin: 0; color: #ad514b; font-size: 13px; }

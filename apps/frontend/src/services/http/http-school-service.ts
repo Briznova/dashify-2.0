@@ -17,11 +17,14 @@ import type {
   CreateAnnouncementInput,
   CreateClassroomInput,
   CreateStaffInput,
+  CreatePlatformSchoolInput,
+  CreatedPlatformSchool,
   DashboardMetric,
   FeeRecord,
   PortalOverview,
   PortalRole,
   PlatformSchool,
+  PlatformSchoolDetail,
   School,
   SchoolOverview,
   SchoolRole,
@@ -916,6 +919,35 @@ export class HttpSchoolService implements SchoolService {
     return parsePlatformSchools(
       await this.api.request<unknown>("/platform/schools", {}, signal),
     );
+  }
+
+  async getPlatformSchool(id: string, signal?: AbortSignal): Promise<PlatformSchoolDetail | null> {
+    let response: unknown;
+    try {
+      response = await this.api.request<unknown>(`/platform/schools/${encodeURIComponent(id)}`, {}, signal);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404 && error.message === "School not found") return null;
+      throw error;
+    }
+    if (!isRecord(response) || !(response.onboardingState === null || response.onboardingState === "NOT_STARTED" || response.onboardingState === "COMPLETED")) {
+      throw new ApiError("The Dashify service returned invalid onboarding data.", 502);
+    }
+    const school = parsePlatformSchools([response])[0];
+    if (school.id.toLowerCase() !== id.toLowerCase()) {
+      throw new ApiError("The Dashify service returned a different school.", 502);
+    }
+    return { ...school, onboardingState: response.onboardingState };
+  }
+
+  async createPlatformSchool(input: CreatePlatformSchoolInput): Promise<CreatedPlatformSchool> {
+    const response = await this.api.request<unknown>("/platform/schools", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    if (!isRecord(response) || response.onboardingState !== "NOT_STARTED") {
+      throw new ApiError("The Dashify service returned invalid onboarding data.", 502);
+    }
+    return { ...parsePlatformSchools([response])[0], onboardingState: response.onboardingState };
   }
 
   getAttendance(signal?: AbortSignal): Promise<AttendanceRecord[]> {

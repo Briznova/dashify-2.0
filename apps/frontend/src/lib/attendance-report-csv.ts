@@ -1,4 +1,5 @@
 import type { AttendanceReport } from "@/types/school";
+import { downloadCsv } from "@/lib/download-csv";
 
 export function createAttendanceReportCsv(report: AttendanceReport): string {
   const rows: (string | number)[][] = [
@@ -48,19 +49,8 @@ export function createAttendanceReportCsv(report: AttendanceReport): string {
 }
 
 export function downloadAttendanceReportCsv(report: AttendanceReport): void {
-  const blob = new Blob([createAttendanceReportCsv(report)], {
-    type: "text/csv;charset=utf-8",
-  });
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = objectUrl;
-  link.download = `attendance-report-${report.fromDate}-to-${report.toDate}.csv`;
-  link.hidden = true;
-  document.body.appendChild(link);
-  try {
-    link.click();
-  } finally {
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-  }
+  downloadCsv(
+    createAttendanceReportCsv(report),
+    `attendance-report-${report.fromDate}-to-${report.toDate}.csv`,
+  );
 }

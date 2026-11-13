@@ -10,7 +10,12 @@ import { createHash, randomBytes, randomUUID } from "crypto";
 import * as argon2 from "argon2";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { LoginDto } from "./dto/login.dto";
+import {
+  platformGrantSelect,
+  platformPermissionKeys,
+} from "../../common/platform-permissions";
 import type { AuthCredentials } from "./auth-cookies";
+import { getAuthTokenTtls } from "./auth-token-ttls";
 
 type SessionContext = {
   sessionId: string;
@@ -61,7 +66,7 @@ export class AuthService {
     await this.logout(existingRefreshToken);
     const platformGrant = await this.prisma.platformAdminGrant.findFirst({
       where: { userId: user.id, revokedAt: null },
-      select: { id: true },
+      select: platformGrantSelect,
     });
     if (platformGrant) {
       const activeMembershipCount = await this.prisma.schoolMembership.count({
@@ -80,7 +85,7 @@ export class AuthService {
         activeSchoolId: null,
         membershipId: null,
         activeWorkspaceRole: null,
-        permissionKeys: ["platform.schools.read"],
+        permissionKeys: platformPermissionKeys(platformGrant),
       };
       await this.prisma.refreshToken.create({
         data: {
@@ -181,7 +186,7 @@ export class AuthService {
     if (existing.scope === AuthScope.PLATFORM) {
       const platformGrant = await this.prisma.platformAdminGrant.findFirst({
         where: { userId: user.id, revokedAt: null },
-        select: { id: true },
+        select: platformGrantSelect,
       });
       if (
         !platformGrant ||
@@ -192,7 +197,7 @@ export class AuthService {
         await this.revokeSession(existing.sessionId);
         throw new UnauthorizedException();
       }
-      permissionKeys = ["platform.schools.read"];
+      permissionKeys = platformPermissionKeys(platformGrant);
     } else if (existing.scope === AuthScope.SCHOOL) {
       if (!existing.activeSchoolId || !existing.membershipId) {
         await this.revokeSession(existing.sessionId);
@@ -366,7 +371,7 @@ export class AuthService {
     if (context.scope === "platform") {
       const platformGrant = await this.prisma.platformAdminGrant.findFirst({
         where: { userId, revokedAt: null },
-        select: { id: true },
+        select: platformGrantSelect,
       });
       if (
         !platformGrant ||
@@ -382,7 +387,7 @@ export class AuthService {
         {
           ...context,
           scope: "platform",
-          permissionKeys: ["platform.schools.read"],
+          permissionKeys: platformPermissionKeys(platformGrant),
         },
         null,
       );
@@ -543,7 +548,7 @@ export class AuthService {
       },
       {
         secret: this.config.getOrThrow<string>("AUTH_ACCESS_TOKEN_SECRET"),
-        expiresIn: Number(this.config.get("ACCESS_TOKEN_TTL_SECONDS", 900)),
+        expiresIn: getAuthTokenTtls(this.config).accessTokenTtlSeconds,
       },
     );
   }
@@ -570,7 +575,7 @@ export class AuthService {
   private refreshExpiry(): Date {
     return new Date(
       Date.now() +
-        Number(this.config.get("REFRESH_TOKEN_TTL_SECONDS", 2_592_000)) * 1000,
+        getAuthTokenTtls(this.config).refreshTokenTtlSeconds * 1000,
     );
   }
 

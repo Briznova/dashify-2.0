@@ -292,6 +292,19 @@ export type PlatformSchool = {
   createdAt: string;
 };
 
+export type CreatePlatformSchoolInput = {
+  name: string;
+  code: string;
+};
+
+export type PlatformSchoolDetail = PlatformSchool & {
+  onboardingState: "NOT_STARTED" | "COMPLETED" | null;
+};
+
+export type CreatedPlatformSchool = PlatformSchoolDetail & {
+  onboardingState: "NOT_STARTED";
+};
+
 export type AttendanceRecord = {
   id: string;
   date: string;

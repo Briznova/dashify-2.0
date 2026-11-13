@@ -18,7 +18,10 @@ The monorepo uses these links as the source of truth for coordinated feature wor
 | [Contract baseline](./01-contract-baseline.md) | Observed frontend/backend contracts and verified mismatches |
 | [Identity and tenancy spec](./02-identity-auth-tenancy-spec.md) | Auth/session, school selection, role mapping, and tenant boundaries |
 | [Auth/session OpenAPI contract](../api-contracts/auth-session.openapi.yaml) | Browser auth, school/workspace selection, and platform-only session; reset operations remain proposed |
-| [Platform school-directory OpenAPI contract](../api-contracts/platform-schools.openapi.yaml) | Read-only school metadata for a dedicated platform-only session |
+| [Platform schools OpenAPI contract](../api-contracts/platform-schools.openapi.yaml) | School metadata, onboarding state and explicitly authorized creation for a platform-only session |
+| [Platform audit OpenAPI contract](../api-contracts/platform-audit.openapi.yaml) | Whitelisted, redacted platform-origin events with separately authorized access |
+| [Platform settings OpenAPI contract](../api-contracts/platform-settings.openapi.yaml) | Read-only enforced token lifetimes with separately authorized access |
+| [Platform support OpenAPI contract](../api-contracts/platform-support.openapi.yaml) | Platform-only internal tickets, permission-gated actions and history |
 | [Dashboard OpenAPI contract](../api-contracts/dashboard.openapi.yaml) | School-administrator counts, Principal daily attendance snapshot, and Teacher assigned-class attendance; other roles and trend metrics remain out of scope |
 | [Attendance report OpenAPI contract](../api-contracts/attendance-report.openapi.yaml) | Approved school-administrator aggregate report for closed sessions; no exports or student-level detail |
 | [Access and workspace spec](./03-access-and-workspace-spec.md) | Frontend role policy and its relationship to backend permissions |
@@ -29,6 +32,7 @@ The monorepo uses these links as the source of truth for coordinated feature wor
 | [Verification and release](./06-verification-and-release.md) | Contract, integration, authorization, isolation, and release criteria |
 | [Figma design reference](./07-figma-design-reference.md) | Figma file and frame links for role workspaces and related screens |
 | [Super Admin workspace LLD](./08-super-admin-workspace-lld.md) | Approved frontend previews and existing platform directory integration |
+| [Super Admin end-to-end spec](./09-super-admin-end-to-end-spec.md) | Approved school setup, CSV, support, audit and settings direction and remaining gates |
 | [Decision register](./decisions/README.md) | Open architecture/product decisions that block implementation |
 | [Feature spec template](./templates/feature-spec-template.md) | Required format for implementation-ready feature specs |
 | [Decision record template](./templates/decision-record-template.md) | Record decisions that affect contracts or architecture |

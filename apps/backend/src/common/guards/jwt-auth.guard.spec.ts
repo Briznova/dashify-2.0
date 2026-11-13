@@ -171,4 +171,44 @@ describe("JwtAuthGuard browser sessions", () => {
     );
     expect(prisma.schoolMembership.findFirst).not.toHaveBeenCalled();
   });
-});
+
+  it("derives platform.schools.create only from an explicit server-side grant permission", async () => {
+    const platformPayload = {
+      sub: "platform-user-1",
+      email: "platform@example.test",
+      sid: "platform-session-1",
+      scope: "platform",
+      permissions: ["platform.schools.create"],
+    };
+    const prisma = {
+      refreshToken: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "refresh-1", scope: AuthScope.PLATFORM }),
+      },
+      platformAdminGrant: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "grant-1",
+          permissions: [{ permission: "SCHOOLS_CREATE" }],
+        }),
+      },
+    };
+    const guard = new JwtAuthGuard(
+      { verifyAsync: jest.fn().mockResolvedValue(platformPayload) } as unknown as JwtService,
+      { getOrThrow: jest.fn().mockReturnValue("x".repeat(32)) } as unknown as ConfigService,
+      prisma as unknown as PrismaService,
+    );
+
+    await expect(guard.canActivate(executionContext)).resolves.toBe(true);
+    expect(prisma.platformAdminGrant.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          permissions: { where: { revokedAt: null }, select: { permission: true } },
+        }),
+      }),
+    );
+    expect(request).toHaveProperty("user.permissions", [
+      "platform.schools.read",
+      "platform.schools.create",
+    ]);
+  });});

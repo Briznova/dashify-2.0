@@ -142,6 +142,39 @@ Phase 3 implementation evidence (2026-11-12): 54 frontend tests, lint, TypeScrip
 **Reference:** [Backend capability backlog](./05-backend-capability-backlog.md)
 
 - [x] Product approves the Super Admin frontend design previews and integration with existing platform APIs (2026-11-13); unsupported operations remain dummy and separately gated. See [Super Admin workspace LLD](./08-super-admin-workspace-lld.md).
+- [x] Product approves end-to-end Super Admin direction excluding subscriptions, invoices, billing and platform-user management (2026-11-14). The [end-to-end spec](./09-super-admin-end-to-end-spec.md) records approved defaults and remaining operational gates.
+- [ ] Complete the approved Super Admin workflows, including invitation delivery; bulk CSV imports are deferred at product request. Record separate verification evidence for each.
+- [x] Implement the initial school-creation slice with an explicit grant and
+  isolated-database HTTP verification; see the [end-to-end spec](./09-super-admin-end-to-end-spec.md)
+  for results, operational gates and the accidental application of its additive
+  migration to the configured database.
+- [x] Connect selected-school detail to the recorded onboarding state and
+  verify the explicit target, unknown state and audit in an isolated database.
+- [x] Add School Admin setup confirmation requiring an academic year and an
+  active class with an active section; expose recorded state and unknown
+  counts to platform users. The additive migration was applied locally with
+  approval. Isolated HTTP tests cover two-school isolation, CSRF, platform
+  denial, concurrent confirmation and summaries; focused tests and builds pass.
+  Administrator invitations remain unimplemented.
+- [x] Add explicitly permissioned School Admin creation with a configured shared
+  password. Isolated PostgreSQL HTTP tests cover creation, login, tenant role,
+  permissions, CSRF, duplicate-email concurrency and redacted audit. The
+  permission migration and grant were enabled locally with approval. The
+  shared password does not provide email verification or forced password
+  changes; invitation delivery remains future work.
+- [x] Implement and verify the platform-only redacted audit slice with a
+  separate permission and isolated-database HTTP checks; the migration and
+  permission were subsequently enabled on the approved local database. See the [audit contract](../api-contracts/platform-audit.openapi.yaml).
+- [x] Implement and verify the read-only enforced platform settings slice with
+  separate permission and isolated-database HTTP checks; the migration and
+  permission were subsequently enabled on the approved local database. See the [settings contract](../api-contracts/platform-settings.openapi.yaml).
+- [x] Implement the internal platform support queue and detail with explicit
+  read/update grants, versioned actions and resolved-ticket cleanup; verify
+  against isolated PostgreSQL and enable locally with approval. Production
+  cleanup monitoring, backup policy and isolation remain release gates. See
+  the [support contract](../api-contracts/platform-support.openapi.yaml).
+- [x] Connect selected-school detail to the existing platform directory metadata, without school-scoped access or a new backend contract.
+- [x] Enable a local CSV download of filtered platform school-directory metadata; no server-side export or separate export audit is claimed.
 - [x] Product approves all twelve remaining Phase 5 areas for prioritization (2026-11-13); this does not approve unresolved feature behavior, API contracts, permissions, or implementation details.
 - [x] Resolve the first staff-account slice using existing user accounts only; grant Teacher role only, defer invitations/credentials and other role grants, and preserve the global account on deactivation.
 - [x] Implement active-school staff profile create/update/deactivate, existing-account Teacher linkage, assignment cleanup, and audit events.

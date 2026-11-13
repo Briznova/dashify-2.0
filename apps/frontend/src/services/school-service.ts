@@ -9,6 +9,8 @@ import type {
   CreateAcademicYearInput,
   CreateClassroomInput,
   CreateStaffInput,
+  CreatePlatformSchoolInput,
+  CreatedPlatformSchool,
   AcademicReport,
   Assignment,
   AttendanceRecord,
@@ -18,6 +20,7 @@ import type {
   PortalOverview,
   PortalRole,
   PlatformSchool,
+  PlatformSchoolDetail,
   School,
   SchoolOverview,
   SchoolRole,
@@ -56,6 +59,8 @@ export interface SchoolService {
   createAcademicSection(input: CreateAcademicSectionInput): Promise<AcademicSection>;
   getSchools(signal?: AbortSignal): Promise<School[]>;
   getPlatformSchools(signal?: AbortSignal): Promise<PlatformSchool[]>;
+  getPlatformSchool(id: string, signal?: AbortSignal): Promise<PlatformSchoolDetail | null>;
+  createPlatformSchool(input: CreatePlatformSchoolInput): Promise<CreatedPlatformSchool>;
   getAttendance(signal?: AbortSignal): Promise<AttendanceRecord[]>;
   getAttendanceReport(fromDate: string, toDate: string, signal?: AbortSignal): Promise<AttendanceReport>;
   getAttendanceSessions(date: string, signal?: AbortSignal): Promise<AttendanceSession[]>;

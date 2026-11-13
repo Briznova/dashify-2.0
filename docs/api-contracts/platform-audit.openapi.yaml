@@ -1,0 +1,118 @@
+openapi: 3.0.3
+info:
+  title: DASHIFY Platform Audit Contract
+  version: 1.2.0
+  description: >
+    Read-only, redacted platform-origin audit events. School-scoped audit
+    records, summaries, network addresses and arbitrary event types are excluded.
+servers:
+  - url: http://localhost:3001/api/v1
+paths:
+  /platform/audit-events:
+    get:
+      operationId: listPlatformAuditEvents
+      summary: List supported platform audit events
+      description: >
+        Requires platform scope and a separately granted platform.audit.read
+        permission. Each successful read is audited. Results include only the
+        action/resource whitelist and rows without a school context. Ordering is
+        createdAt descending, then id descending. The cursor is an opaque keyset
+        position; use the same filters when requesting the next page. Only
+        successful events currently recorded by the application are included.
+        No fixed retention period is guaranteed.
+      security:
+        - accessCookie: []
+      parameters:
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: cursor
+          description: The previous response's nextCursor.
+          schema:
+            type: string
+            maxLength: 256
+        - in: query
+          name: action
+          schema:
+            $ref: "#/components/schemas/PlatformAuditAction"
+        - in: query
+          name: from
+          description: Inclusive UTC timestamp.
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          description: Inclusive UTC timestamp, not earlier than from.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Redacted page
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data, nextCursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, createdAt, actorUserId, action]
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        createdAt:
+                          type: string
+                          format: date-time
+                        actorUserId:
+                          type: string
+                          format: uuid
+                          nullable: true
+                        action:
+                          $ref: "#/components/schemas/PlatformAuditAction"
+                  nextCursor:
+                    type: string
+                    nullable: true
+        "400":
+          description: Invalid filter, cursor, or date range
+        "401":
+          description: Missing or invalid session
+        "403":
+          description: Incorrect scope or missing platform audit permission
+components:
+  securitySchemes:
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: dashify_access
+  schemas:
+    PlatformAuditAction:
+      type: string
+      enum:
+        - PLATFORM_ADMIN_BOOTSTRAPPED
+        - PLATFORM_PERMISSION_GRANTED
+        - PLATFORM_SCHOOL_DIRECTORY_READ
+        - PLATFORM_SCHOOL_DETAIL_READ
+        - PLATFORM_SCHOOL_CREATED
+        - PLATFORM_SCHOOL_ADMIN_CREATED
+        - PLATFORM_AUDIT_READ
+        - PLATFORM_SETTINGS_READ
+        - PLATFORM_SUPPORT_CREATED
+        - PLATFORM_SUPPORT_UPDATED
+        - PLATFORM_SUPPORT_RETENTION_CLEANUP

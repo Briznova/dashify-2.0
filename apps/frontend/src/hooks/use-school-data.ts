@@ -21,6 +21,7 @@ import type {
   PortalOverview,
   PortalRole,
   PlatformSchool,
+  PlatformSchoolDetail,
   School,
   SchoolOverview,
   SchoolRole,
@@ -332,6 +333,14 @@ export function usePlatformSchools() {
     [],
   );
   return useRemoteResource<PlatformSchool[]>(load);
+}
+
+export function usePlatformSchool(id: string) {
+  const load = useCallback(
+    (signal: AbortSignal) => schoolService.getPlatformSchool(id, signal),
+    [id],
+  );
+  return useRemoteResource<PlatformSchoolDetail | null>(id ? load : null);
 }
 
 export function useAttendance() {

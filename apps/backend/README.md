@@ -51,6 +51,15 @@ The seed requires `SEED_ADMIN_EMAIL` and a locally configured `SEED_ADMIN_PASSWO
 
 To bootstrap a separate platform-only Super Admin in a local database, optionally set `SEED_PLATFORM_ADMIN_EMAIL` and `SEED_PLATFORM_ADMIN_PASSWORD` (minimum 12 characters) before running the seed. The account must not have an active school membership. This grant provides read-only school directory access; it does not enable school switching, school data access, or school lifecycle changes. Do not commit credentials. To revoke access, set `revoked_at` on that user's `platform_admin_grants` row; active platform requests then fail closed.
 
+School Admin account creation requires the separate `platform.school-admins.create`
+grant and a server-side `SCHOOL_ADMIN_DEFAULT_PASSWORD` of at least 12
+characters. Keep the password in deployment-managed secret configuration, not
+source control. Every new account receives that same password; no invitation,
+email verification or forced password change is performed. Changing the
+configured password affects only future accounts, not existing password hashes.
+Replace this temporary mechanism with individual credential setup before
+relying on it for production.
+
 ## Authentication flow
 
 1. `POST /api/v1/auth/login` with email/password.

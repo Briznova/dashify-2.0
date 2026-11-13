@@ -19,6 +19,7 @@ import type {
   PortalOverview,
   PortalRole,
   PlatformSchool,
+  PlatformSchoolDetail,
   School,
   SchoolOverview,
   SchoolRole,
@@ -607,6 +608,15 @@ export class MockSchoolService implements SchoolService {
       isActive: index !== 2,
       createdAt: "2026-01-01T00:00:00.000Z",
     }));
+  }
+
+  async getPlatformSchool(id: string, signal?: AbortSignal): Promise<PlatformSchoolDetail | null> {
+    const school = (await this.getPlatformSchools(signal)).find((item) => item.id === id);
+    return school ? { ...school, onboardingState: null } : null;
+  }
+
+  async createPlatformSchool(): Promise<never> {
+    throw new Error("School creation is unavailable in demo mode.");
   }
 
   async getAttendance(signal?: AbortSignal): Promise<AttendanceRecord[]> {

@@ -26,5 +26,6 @@
 .form .button { justify-self: start; }
 .form .link { margin: 0; }
 .field { display: grid; gap: 6px; color: #414960; font-size: 13px; font-weight: 600; }
-.field input { width: 100%; padding: 10px 12px; border: 1px solid #dfe3ef; border-radius: 7px; background: #f7f8fc; color: #687087; }
+.field input, .field select, .field textarea { width: 100%; padding: 10px 12px; border: 1px solid #dfe3ef; border-radius: 7px; background: #f7f8fc; color: #687087; }
+.supportDescription { white-space: pre-wrap; overflow-wrap: anywhere; }
 .planPrice { margin: 18px 0 0; color: #30364e; font-size: 15px; font-weight: 600; }

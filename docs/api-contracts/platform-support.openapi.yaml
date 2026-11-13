@@ -1,0 +1,211 @@
+openapi: 3.0.3
+info:
+  title: DASHIFY Platform Support Contract
+  version: 1.0.0
+  description: Platform-only internal tickets. No school-facing tickets, attachments or notifications.
+servers:
+  - url: http://localhost:3001/api/v1
+paths:
+  /platform/support-tickets:
+    get:
+      operationId: listPlatformSupportTickets
+      description: Requires platform scope and platform.support.read. Ordered by createdAt and id descending.
+      security: [{ accessCookie: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/Status" }
+        - in: query
+          name: pageSize
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - in: query
+          name: cursor
+          description: Use the previous nextCursor with the same filters.
+          schema: { type: string, maxLength: 256 }
+      responses:
+        "200":
+          description: Ticket page; Cache-Control is no-store.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Ticket" }
+                  nextCursor: { type: string, nullable: true }
+        "400": { description: Invalid filter or cursor }
+        "401": { description: Missing or invalid session }
+        "403": { description: Wrong scope or missing read permission }
+    post:
+      operationId: createPlatformSupportTicket
+      description: >
+        Requires platform scope, platform.support.read and platform.support.update.
+        Creation is not idempotent; after an interrupted request check the queue
+        before retrying. The school must exist. Never include credentials.
+      security: [{ accessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Csrf"
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [schoolId, title, description]
+              properties:
+                schoolId: { type: string, format: uuid }
+                title: { type: string, minLength: 2, maxLength: 120 }
+                description: { type: string, minLength: 1, maxLength: 4000 }
+                priority: { $ref: "#/components/schemas/Priority" }
+      responses:
+        "201":
+          description: Created open, unassigned ticket; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ticket" }
+        "400": { description: Invalid input }
+        "401": { description: Missing or invalid session }
+        "403": { description: Missing permission, wrong scope, origin or CSRF token }
+        "404": { description: School not found }
+  /platform/support-tickets/summary:
+    get:
+      operationId: getPlatformSupportSummary
+      description: Requires platform scope and platform.support.read. Counts OPEN and IN_PROGRESS tickets.
+      security: [{ accessCookie: [] }]
+      responses:
+        "200":
+          description: Current unresolved ticket count; Cache-Control is no-store.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [unresolved]
+                properties:
+                  unresolved: { type: integer, minimum: 0 }
+        "401": { description: Missing or invalid session }
+        "403": { description: Wrong scope or missing read permission }
+  /platform/support-tickets/{id}:
+    parameters:
+      - $ref: "#/components/parameters/TicketId"
+    get:
+      operationId: getPlatformSupportTicket
+      description: Requires platform scope and platform.support.read.
+      security: [{ accessCookie: [] }]
+      responses:
+        "200":
+          description: Ticket and latest 100 events, newest first; Cache-Control is no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Ticket"
+                  - type: object
+                    required: [events]
+                    properties:
+                      events:
+                        type: array
+                        maxItems: 100
+                        items: { $ref: "#/components/schemas/Event" }
+        "400": { description: Invalid ID }
+        "401": { description: Missing or invalid session }
+        "403": { description: Wrong scope or missing read permission }
+        "404": { description: Ticket not found }
+  /platform/support-tickets/{id}/actions:
+    parameters:
+      - $ref: "#/components/parameters/TicketId"
+    post:
+      operationId: actOnPlatformSupportTicket
+      description: >
+        Requires platform scope and both support permissions. Each action
+        requires the last-read version. Only the current actor may claim an
+        unassigned ticket or release their own claim. Resolved tickets may
+        only reopen to OPEN.
+      security: [{ accessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Csrf"
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action, version]
+              properties:
+                action: { type: string, enum: [SET_STATUS, SET_PRIORITY, CLAIM, RELEASE] }
+                version: { type: integer, minimum: 1 }
+                value:
+                  type: string
+                  maxLength: 20
+                  description: Required status or priority for SET_STATUS or SET_PRIORITY; forbidden for claim/release.
+      responses:
+        "201":
+          description: Updated ticket; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ticket" }
+        "400": { description: Invalid input, action or value }
+        "401": { description: Missing or invalid session }
+        "403": { description: Missing permission, wrong scope, origin or CSRF token }
+        "404": { description: Ticket not found }
+        "409": { description: Stale version, invalid transition, unchanged value or invalid assignment }
+components:
+  securitySchemes:
+    accessCookie: { type: apiKey, in: cookie, name: dashify_access }
+  parameters:
+    TicketId:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+    Csrf:
+      in: header
+      name: X-CSRF-Token
+      required: true
+      schema: { type: string }
+    Origin:
+      in: header
+      name: Origin
+      required: true
+      schema: { type: string }
+  schemas:
+    Status: { type: string, enum: [OPEN, IN_PROGRESS, RESOLVED] }
+    Priority: { type: string, enum: [LOW, NORMAL, HIGH, URGENT] }
+    Ticket:
+      type: object
+      required: [id, schoolId, school, title, description, status, priority, createdById, assigneeId, version, resolvedAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        schoolId: { type: string, format: uuid }
+        school:
+          type: object
+          required: [id, name, code]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            code: { type: string }
+        title: { type: string }
+        description: { type: string }
+        status: { $ref: "#/components/schemas/Status" }
+        priority: { $ref: "#/components/schemas/Priority" }
+        createdById: { type: string, format: uuid }
+        assigneeId: { type: string, format: uuid, nullable: true }
+        version: { type: integer }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Event:
+      type: object
+      required: [id, actorUserId, action, fromValue, toValue, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        actorUserId: { type: string, format: uuid }
+        action: { type: string, enum: [CREATED, SET_STATUS, SET_PRIORITY, CLAIM, RELEASE] }
+        fromValue: { type: string, nullable: true }
+        toValue: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }

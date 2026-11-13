@@ -1,0 +1,69 @@
+openapi: 3.0.3
+info:
+  title: DASHIFY School Onboarding Contract
+  version: 1.0.0
+servers:
+  - url: http://localhost:3001/api/v1
+paths:
+  /schools/current/onboarding:
+    get:
+      operationId: getSchoolOnboarding
+      description: Requires an active school session in the School Admin workspace and school.update. Reads only the active school.
+      security: [{ accessCookie: [] }]
+      responses:
+        "200":
+          description: Recorded state and current prerequisite checks; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Onboarding" }
+        "401": { description: Missing or invalid session }
+        "403": { description: Wrong scope, workspace or permission }
+        "404": { description: Active school unavailable }
+  /schools/current/onboarding/complete:
+    post:
+      operationId: confirmSchoolOnboarding
+      description: >
+        Requires the same school context and permission, plus Origin and CSRF.
+        Records an audited historical confirmation only when an academic year,
+        active class and an active section of that class exist for the active
+        school. Repeated confirmation is idempotent and does not create another
+        audit event. Existing schools without a state may confirm when eligible.
+      security: [{ accessCookie: [] }]
+      parameters:
+        - in: header
+          name: Origin
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: { type: string }
+      responses:
+        "201":
+          description: Recorded confirmation; Cache-Control is no-store.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Onboarding" }
+        "401": { description: Missing or invalid session }
+        "403": { description: Wrong scope, workspace, permission, origin or CSRF token }
+        "404": { description: Active school unavailable }
+        "409": { description: Required academic structure is missing }
+components:
+  securitySchemes:
+    accessCookie: { type: apiKey, in: cookie, name: dashify_access }
+  schemas:
+    Onboarding:
+      type: object
+      required: [status, prerequisites]
+      properties:
+        status:
+          type: string
+          nullable: true
+          enum: [NOT_STARTED, COMPLETED, null]
+          description: Null means no state is recorded. COMPLETED is a historical confirmation, not a guarantee of current prerequisites.
+        prerequisites:
+          type: object
+          required: [academicYear, classWithSection]
+          properties:
+            academicYear: { type: boolean }
+            classWithSection: { type: boolean }

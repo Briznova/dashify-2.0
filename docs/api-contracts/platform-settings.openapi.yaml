@@ -1,0 +1,53 @@
+openapi: 3.0.3
+info:
+  title: DASHIFY Platform Settings Contract
+  version: 1.0.0
+  description: Read-only settings already enforced by the backend.
+servers:
+  - url: http://localhost:3001/api/v1
+paths:
+  /platform/settings:
+    get:
+      operationId: readPlatformSettings
+      summary: Read effective session credential lifetimes
+      description: >
+        Requires platform scope and an explicitly granted
+        platform.settings.read permission. Values are the same configuration
+        used when issuing access and refresh credentials. The read is audited.
+        No settings mutation, MFA, lockout, maintenance or retention control is
+        exposed by this endpoint.
+      security:
+        - accessCookie: []
+      responses:
+        "200":
+          description: Effective token lifetimes in seconds
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [accessTokenTtlSeconds, refreshTokenTtlSeconds]
+                properties:
+                  accessTokenTtlSeconds:
+                    type: integer
+                    minimum: 1
+                  refreshTokenTtlSeconds:
+                    type: integer
+                    minimum: 1
+        "401":
+          description: Missing or invalid session
+        "403":
+          description: Incorrect scope or missing platform settings permission
+        "500":
+          description: Invalid effective configuration or audit failure
+components:
+  securitySchemes:
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: dashify_access

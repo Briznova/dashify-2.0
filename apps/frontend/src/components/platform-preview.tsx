@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeading } from "@/components/ui/page-heading";
 import { Panel } from "@/components/ui/panel";
 import { platformPages, type PlatformPage } from "@/lib/platform-pages";
+import { isApiMode } from "@/services";
 import styles from "./platform-preview.module.css";
 
 function PreviewLink({ page, children }: { page: PlatformPage; children: string }) {
@@ -86,7 +87,7 @@ function PreviewContent({ page }: { page: PlatformPage }) {
         <div className={styles.columns}>
           <Panel title="Invitation overview" description="No invitation has been created or sent.">
             <p className={styles.empty}>Invitation details are not connected.</p>
-            <PreviewLink page="create-school-admin">Create another admin preview</PreviewLink>
+            <PreviewLink page="create-school-admin">{isApiMode ? "Create a School Admin" : "Create another admin preview"}</PreviewLink>
           </Panel>
           <Panel title="Invitation and onboarding">
             <Steps items={["Account created", "Password setup email sent", "Administrator sets password", "First login and school onboarding", "Onboarding complete"]} />
@@ -204,8 +205,10 @@ function PreviewContent({ page }: { page: PlatformPage }) {
       return (
         <div className={styles.columns}>
           <Panel title="School setup" description="A proposed workflow for provisioning a school.">
-            <Steps items={["Create or invite a School Admin", "Set up the school profile", "Configure academic years, classes and sections", "Review onboarding"]} />
-            <PreviewLink page="create-school-admin">Preview administrator invitation</PreviewLink>
+            <Steps items={isApiMode
+              ? ["Set up the school profile", "Configure academic years, classes and sections", "Review onboarding"]
+              : ["Create or invite a School Admin", "Set up the school profile", "Configure academic years, classes and sections", "Review onboarding"]} />
+            <PreviewLink page="create-school-admin">{isApiMode ? "Create a School Admin" : "Preview administrator invitation"}</PreviewLink>
           </Panel>
           <Panel title="CSV bulk import" description="Templates, validation and import operations are not connected.">
             <Steps items={["Select a school and data type", "Download a template", "Upload and validate rows", "Review and confirm", "Review results and errors"]} />
@@ -222,7 +225,9 @@ export function PlatformPreview({ page }: { page: PlatformPage }) {
     <div className={styles.page}>
       <PageHeading eyebrow="PLATFORM ADMINISTRATION" title={title} description={description} />
       <div className={styles.warning} role="status">
-        <strong>Dummy page — not connected.</strong> This is a design preview, not actual platform data. Actions are unavailable.
+        {page === "school-setup" && isApiMode
+          ? <><strong>Setup preview.</strong> CSV import remains unavailable. The School Admin creation link opens the connected account form.</>
+          : <><strong>Dummy page — not connected.</strong> This is a design preview, not actual platform data. Actions are unavailable.</>}
       </div>
       <PreviewContent page={page} />
     </div>

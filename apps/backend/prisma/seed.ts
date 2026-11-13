@@ -1,9 +1,26 @@
 import { PrismaClient, MembershipStatus } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { SCHOOL_ADMIN_PERMISSIONS } from '../src/common/school-admin-permissions';
+import {
+  assertCreatePermissionSeedInputs,
+  assertAuditPermissionSeedInputs,
+  assertSettingsPermissionSeedInputs,
+  assertSupportReadPermissionSeedInputs,
+  assertSupportUpdatePermissionSeedInputs,
+  assertSchoolAdminsCreatePermissionSeedInputs,
+  grantPlatformPermission,
+  grantSchoolsCreatePermission,
+} from './seed-platform-permission';
 
 const prisma = new PrismaClient();
 
 async function main(): Promise<void> {
+  const grantSchoolsCreate = assertCreatePermissionSeedInputs(process.env);
+  const grantAuditRead = assertAuditPermissionSeedInputs(process.env);
+  const grantSettingsRead = assertSettingsPermissionSeedInputs(process.env);
+  const grantSupportRead = assertSupportReadPermissionSeedInputs(process.env);
+  const grantSupportUpdate = assertSupportUpdatePermissionSeedInputs(process.env);
+  const grantSchoolAdminsCreate = assertSchoolAdminsCreatePermissionSeedInputs(process.env);
   const email = process.env.SEED_ADMIN_EMAIL;
   const password = process.env.SEED_ADMIN_PASSWORD;
   if (!email || !password || password.length < 12) {
@@ -35,14 +52,7 @@ async function main(): Promise<void> {
     update: {},
     create: { membershipId: membership.id, roleId: role.id },
   });
-  const permissions = [
-    'school.read','school.update','users.read','users.invite','users.update','users.disable',
-    'roles.read','roles.manage','academic_structure.read','academic_structure.manage',
-    'students.read','students.create','students.update','students.archive','guardians.read',
-    'guardians.manage','staff.read','staff.manage','attendance.read','attendance.mark','attendance.correct',
-    'announcements.read','announcements.manage','audit_logs.read','dashboard.read','reports.read'
-  ];
-  for (const key of permissions) {
+  for (const key of SCHOOL_ADMIN_PERMISSIONS) {
     const permission = await prisma.permission.upsert({ where: { key }, update: {}, create: { key } });
     await prisma.rolePermission.upsert({
       where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
@@ -253,6 +263,38 @@ async function main(): Promise<void> {
         });
       });
     }
+
+  }
+
+  if (grantSchoolsCreate) {
+    if (!platformAdminEmail) {
+      throw new Error('A platform administrator email is required to grant school creation.');
+    }
+    await grantSchoolsCreatePermission(prisma, platformAdminEmail);
+  }
+  if (grantAuditRead) {
+    if (!platformAdminEmail) {
+      throw new Error('A platform administrator email is required to grant audit access.');
+    }
+    await grantPlatformPermission(prisma, platformAdminEmail, 'AUDIT_READ');
+  }
+  if (grantSettingsRead) {
+    if (!platformAdminEmail) {
+      throw new Error('A platform administrator email is required to grant settings access.');
+    }
+    await grantPlatformPermission(prisma, platformAdminEmail, 'SETTINGS_READ');
+  }
+  if (grantSupportRead) {
+    if (!platformAdminEmail) throw new Error('Platform administrator email is required.');
+    await grantPlatformPermission(prisma, platformAdminEmail, 'SUPPORT_READ');
+  }
+  if (grantSupportUpdate) {
+    if (!platformAdminEmail) throw new Error('Platform administrator email is required.');
+    await grantPlatformPermission(prisma, platformAdminEmail, 'SUPPORT_UPDATE');
+  }
+  if (grantSchoolAdminsCreate) {
+    if (!platformAdminEmail) throw new Error('Platform administrator email is required.');
+    await grantPlatformPermission(prisma, platformAdminEmail, 'SCHOOL_ADMINS_CREATE');
   }
 
   console.log('Synthetic seed complete.');

@@ -9,6 +9,10 @@ import { JwtService } from "@nestjs/jwt";
 import { AuthScope } from "@prisma/client";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { AuthenticatedRequest } from "../interfaces/authenticated-request";
+import {
+  platformGrantSelect,
+  platformPermissionKeys,
+} from "../platform-permissions";
 import { ACCESS_COOKIE } from "../../modules/auth/auth-cookies";
 
 @Injectable()
@@ -93,7 +97,7 @@ export class JwtAuthGuard implements CanActivate {
           revokedAt: null,
           user: { is: { isActive: true } },
         },
-        select: { id: true },
+        select: platformGrantSelect,
       });
       if (!platformGrant) throw new UnauthorizedException();
       request.user = {
@@ -101,7 +105,7 @@ export class JwtAuthGuard implements CanActivate {
         email: payload.email,
         sessionId: payload.sid,
         scope: "platform",
-        permissions: ["platform.schools.read"],
+        permissions: platformPermissionKeys(platformGrant),
       };
       return true;
     }

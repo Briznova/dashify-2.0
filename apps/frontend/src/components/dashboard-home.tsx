@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useAuthSession } from "@/hooks/use-auth";
 import { WorkspaceHome } from "@/modules/workspace/workspace-home";
+import { SchoolOnboarding } from "@/components/school-onboarding";
 import { isApiMode } from "@/services";
 import styles from "./dashboard-shell.module.css";
 
@@ -59,6 +60,11 @@ export function DashboardHome() {
   }
 
   return (
-    <WorkspaceHome role={session.user.role} userName={session.user.name} />
+    <>
+      <WorkspaceHome role={session.user.role} userName={session.user.name} />
+      {isApiMode && session.scope === "school" && session.user.role === "school_admin" &&
+        session.activeSchool && session.permissionKeys.includes("school.update") &&
+        <SchoolOnboarding key={session.activeSchool.id} />}
+    </>
   );
 }

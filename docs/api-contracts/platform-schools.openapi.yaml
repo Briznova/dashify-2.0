@@ -1,11 +1,11 @@
 openapi: 3.0.3
 info:
-  title: DASHIFY Platform School Directory Contract
-  version: 1.0.0
+  title: DASHIFY Platform School Directory and Creation Contract
+  version: 1.2.0
   description: >
-    Implemented read-only school directory for a dedicated platform-only
-    session. This contract does not grant school lifecycle, impersonation, or
-    school-record access.
+    School directory and separately authorized school creation for a dedicated
+    platform-only session. This contract does not grant school lifecycle,
+    impersonation, or school-record access.
 servers:
   - url: http://localhost:3001/api/v1
     description: Local development API
@@ -42,6 +42,176 @@ paths:
           description: Missing, expired, revoked, or invalid platform session
         "403":
           description: School-scoped session or missing platform permission
+    post:
+      tags: [Platform]
+      operationId: createPlatformSchool
+      summary: Create a school with onboarding not started
+      description: >
+        Requires platform scope and an explicitly granted
+        platform.schools.create permission. The school, onboarding state and
+        creation audit event are written transactionally. This does not create
+        an administrator or send an invitation. Cookie-authenticated mutations
+        require an allowed Origin and a CSRF header matching the CSRF cookie.
+      security:
+        - accessCookie: []
+      parameters:
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, code]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 120
+                  description: Trimmed school name.
+                code:
+                  type: string
+                  minLength: 2
+                  maxLength: 32
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9-]{1,31}$"
+                  description: Trimmed and normalized to uppercase; compared case-insensitively.
+      responses:
+        "201":
+          description: Created school and its initial onboarding state
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedPlatformSchool"
+        "400":
+          description: Invalid school identity or unexpected input
+        "401":
+          description: Missing, expired, revoked, or invalid platform session
+        "403":
+          description: Missing permission, wrong scope, or invalid origin or CSRF token
+        "409":
+          description: School code already exists
+  /platform/schools/onboarding-summary:
+    get:
+      operationId: getPlatformOnboardingSummary
+      description: Requires platform scope and platform.schools.read. Counts recorded states separately from schools with no state; read is audited.
+      security: [{ accessCookie: [] }]
+      responses:
+        "200":
+          description: Counts of recorded NOT_STARTED, COMPLETED and unknown states; Cache-Control is no-store.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [notStarted, completed, unknown]
+                properties:
+                  notStarted: { type: integer, minimum: 0 }
+                  completed: { type: integer, minimum: 0 }
+                  unknown: { type: integer, minimum: 0 }
+        "401": { description: Missing or invalid session }
+        "403": { description: Wrong scope or missing platform permission }
+  /platform/schools/{id}/admins:
+    post:
+      operationId: createSchoolAdmin
+      description: >
+        Creates an active account with a configured shared password. Requires platform
+        scope, platform.schools.read and platform.school-admins.create. The
+        account has normal school access. No email verification, invitation or forced password
+        change is provided. Existing email identities are rejected.
+      security: [{ accessCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: Origin
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [firstName, email]
+              properties:
+                firstName: { type: string, minLength: 1, maxLength: 80 }
+                lastName: { type: string, minLength: 1, maxLength: 80 }
+                email: { type: string, format: email, maxLength: 254 }
+      responses:
+        "201":
+          description: Active account. No password is returned; Cache-Control is no-store.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, schoolId, email]
+                properties:
+                  id: { type: string, format: uuid }
+                  schoolId: { type: string, format: uuid }
+                  email: { type: string, format: email }
+        "400": { description: Invalid input }
+        "401": { description: Missing or invalid session }
+        "403": { description: Wrong scope, permission, origin or CSRF token }
+        "404": { description: School absent or inactive }
+        "409": { description: Existing identity or nonstandard administrator role }
+        "429": { description: Too many requests }
+        "503": { description: Default password not configured }
+  /platform/schools/{id}:
+    get:
+      tags: [Platform]
+      operationId: getPlatformSchool
+      summary: Read school metadata and known onboarding state
+      description: >
+        Requires platform scope and platform.schools.read. Reads the explicitly
+        targeted school within the tenant transaction boundary and audits the
+        successful read. No school-scoped records or invitation details are
+        included. A null onboarding state means no state is recorded and must
+        not be inferred from active status.
+      security:
+        - accessCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: School metadata and known onboarding state
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformSchoolDetail"
+        "400":
+          description: Invalid school ID
+        "401":
+          description: Missing or invalid platform session
+        "403":
+          description: Wrong scope or missing platform permission
+        "404":
+          description: School not found; the error message is "School not found".
 components:
   securitySchemes:
     accessCookie:
@@ -66,3 +236,44 @@ components:
         createdAt:
           type: string
           format: date-time
+    CreatedPlatformSchool:
+      type: object
+      additionalProperties: false
+      required: [id, name, code, isActive, createdAt, onboardingState]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        onboardingState:
+          type: string
+          enum: [NOT_STARTED]
+    PlatformSchoolDetail:
+      type: object
+      additionalProperties: false
+      required: [id, name, code, isActive, createdAt, onboardingState]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        onboardingState:
+          type: string
+          nullable: true
+          enum: [NOT_STARTED, COMPLETED, null]

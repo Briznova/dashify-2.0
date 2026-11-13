@@ -146,6 +146,79 @@ describe("HttpSchoolService.getClassrooms", () => {
       );
     });
 
+    it("creates a platform school using the protected directory endpoint", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        id: "school-1",
+        name: "Example School",
+        code: "EXAMPLE",
+        isActive: true,
+        createdAt: "2026-04-03T08:00:00.000Z",
+        onboardingState: "NOT_STARTED",
+      }), { status: 201, headers: { "Content-Type": "application/json" } }));
+      vi.stubGlobal("fetch", fetchMock);
+      const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+      await expect(service.createPlatformSchool({ name: "Example School", code: "EXAMPLE" })).resolves.toMatchObject({
+        id: "school-1",
+        code: "EXAMPLE",
+        onboardingState: "NOT_STARTED",
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://dashify.test/api/v1/platform/schools",
+        expect.objectContaining({ method: "POST", credentials: "include", body: JSON.stringify({ name: "Example School", code: "EXAMPLE" }) }),
+      );
+    });
+
+    it("rejects a creation response without a supported onboarding state", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        id: "school-1", name: "Example School", code: "EXAMPLE",
+        isActive: true, createdAt: "2026-04-03T08:00:00.000Z",
+      }), { status: 201 })));
+      const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+      await expect(service.createPlatformSchool({ name: "Example School", code: "EXAMPLE" }))
+        .rejects.toThrow("invalid onboarding data");
+    });
+
+    it("returns not-found for a missing selected school and propagates other failures", async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ message: "School not found" }), { status: 404 }))
+        .mockResolvedValueOnce(new Response("", { status: 403 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Cannot GET /api/v1/platform/schools/missing" }), { status: 404 }));
+      vi.stubGlobal("fetch", fetchMock);
+      const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+      await expect(service.getPlatformSchool("missing")).resolves.toBeNull();
+      await expect(service.getPlatformSchool("missing")).rejects.toMatchObject({ status: 403 });
+      await expect(service.getPlatformSchool("missing")).rejects.toMatchObject({ status: 404 });
+    });
+
+    it("rejects an unsupported onboarding state on school detail", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        id: "school-1", name: "Example School", code: "EXAMPLE",
+        isActive: true, createdAt: "2026-04-03T08:00:00.000Z", onboardingState: "UNSUPPORTED",
+      }), { status: 200 })));
+      const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+      await expect(service.getPlatformSchool("school-1")).rejects.toThrow("invalid onboarding data");
+    });
+
+    it("rejects a selected-school response for a different ID", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        id: "school-2", name: "Other School", code: "OTHER",
+        isActive: true, createdAt: "2026-04-03T08:00:00.000Z", onboardingState: null,
+      }), { status: 200 })));
+      const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+      await expect(service.getPlatformSchool("school-1")).rejects.toThrow("different school");
+    });
+
+    it("accepts a canonicalized UUID returned for an uppercase ID", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        id: "abcdefab-0000-4000-8000-000000000001", name: "Example School", code: "EXAMPLE",
+        isActive: true, createdAt: "2026-04-03T08:00:00.000Z", onboardingState: null,
+      }), { status: 200 })));
+      const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+      await expect(service.getPlatformSchool("ABCDEFAB-0000-4000-8000-000000000001"))
+        .resolves.toMatchObject({ onboardingState: null });
+    });
+
     it("rejects malformed school-directory data", async () => {
       vi.stubGlobal(
         "fetch",

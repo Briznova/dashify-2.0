@@ -3,9 +3,52 @@
   gap: 18px;
 }
 
+.headingActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.secondaryButton,
+.primaryLink {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 13px;
+  border: 1px solid #e1e6f0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.secondaryButton:disabled {
+  background: #f5f6fa;
+  color: #788098;
+  cursor: not-allowed;
+}
+
+.secondaryButton:not(:disabled) {
+  background: #fff;
+  color: #30364e;
+  cursor: pointer;
+}
+
+.exportError {
+  margin: 0;
+  color: #ad514b;
+  font-size: 13px;
+}
+
+.primaryLink {
+  border-color: #3566e8;
+  background: #3566e8;
+  color: #fff;
+}
+
 .metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -19,29 +62,198 @@
 .warning {
   margin: 0;
   padding: 14px 16px;
-  border: 1px solid #f1d394;
+  border: 1px solid #e7e2fc;
   border-radius: 8px;
-  background: #fff8e6;
-  color: #76520c;
-  font-size: 14px;
-}
-
-.previewLinks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 20px;
-  padding: 16px;
-  border: 1px solid #e9ebf2;
-  border-radius: 10px;
-  background: #fff;
+  background: #f5f2ff;
+  color: #6654b3;
   font-size: 13px;
 }
 
-.previewLinks p { flex-basis: 100%; margin: 0; color: #737b91; }
-.previewLinks a { color: #4a60d9; font-weight: 600; }
+.filters {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0;
+}
 
-@media (max-width: 760px) {
+.filters label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: #454d64;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.filters input,
+.filters select {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #e0e5ef;
+  border-radius: 6px;
+  background: #fff;
+  color: #30364e;
+  font-size: 13px;
+}
+
+.filters select:disabled {
+  background: #f5f6fa;
+  color: #788098;
+}
+
+.filters small {
+  color: #788098;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.tableScroll {
+  overflow-x: auto;
+  margin-top: 16px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #697187;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table th {
+  padding: 12px;
+  border-bottom: 1px solid #edf0f5;
+  background: #f7f9fc;
+  color: #788098;
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.table td {
+  padding: 13px 12px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.table td strong,
+.table td small {
+  display: block;
+}
+
+.table td strong {
+  color: #30364e;
+}
+
+.table td small {
+  margin-top: 3px;
+  color: #788098;
+}
+
+.empty {
+  padding: 28px !important;
+  text-align: center;
+}
+
+.tableFooter,
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tableFooter {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  color: #788098;
+  font-size: 12px;
+}
+
+.pagination button {
+  padding: 6px 9px;
+  border: 1px solid #e0e5ef;
+  border-radius: 5px;
+  background: #fff;
+  color: #454d64;
+  cursor: pointer;
+}
+
+.pagination button:disabled {
+  color: #a4aaba;
+  cursor: not-allowed;
+}
+
+.textLink {
+  color: #3566e8;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr);
+  gap: 14px;
+  margin: 20px 0 0;
+  font-size: 13px;
+}
+
+.details dt {
+  color: #737b91;
+}
+
+.details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #30364e;
+}
+
+.overviewPanels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.previewText {
+  margin: 18px 0 0;
+  color: #737b91;
+  font-size: 13px;
+}
+
+.setupNotice {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #eef4ff;
+  color: #526581;
+  font-size: 13px;
+}
+
+.setupNotice strong {
+  color: #3566e8;
+}
+
+.setupNotice p {
+  margin: 0;
+}
+
+@media (max-width: 1000px) {
   .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .metrics,
+  .filters,
+  .overviewPanels {
     grid-template-columns: 1fr;
   }
 }
+.activityList { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.activityList li { display: grid; gap: 4px; color: #414960; font-size: 13px; }
+.activityList time { color: #737b91; font-size: 12px; }

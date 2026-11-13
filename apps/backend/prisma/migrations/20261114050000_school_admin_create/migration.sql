@@ -1,0 +1,1 @@
+ALTER TYPE "PlatformPermission" ADD VALUE 'SCHOOL_ADMINS_CREATE';

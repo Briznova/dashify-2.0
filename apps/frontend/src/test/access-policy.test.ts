@@ -297,6 +297,13 @@ describe("role access policy", () => {
     ).toBe(false);
   });
 
+  it("requires the explicit platform school-create permission for the new-school route", () => {
+    expect(isDashboardRouteAllowed("/dashboard/schools/new", "super_admin", ["platform.schools.read"])).toBe(false);
+    expect(isDashboardRouteAllowed("/dashboard/schools/new", "super_admin", ["platform.schools.read", "platform.schools.create"])).toBe(true);
+    expect(isDashboardRouteAllowed("/dashboard/schools/new", "school_admin", ["platform.schools.read", "platform.schools.create"])).toBe(false);
+    expect(isDashboardRouteAllowed("/dashboard/schools/new", "super_admin")).toBe(false);
+  });
+
   it("keeps the assigned workspace home reachable when its aggregate API is unavailable", () => {
     expect(
       getRoleNavigation("teacher", []).map((item) => item.capability),
