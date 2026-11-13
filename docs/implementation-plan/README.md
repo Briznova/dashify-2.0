@@ -25,6 +25,7 @@ The monorepo uses these links as the source of truth for coordinated feature wor
 | [Core integration slices](./04-core-integration-slices.md) | Student, academic structure, and attendance vertical slices |
 | [Backend capability backlog](./05-backend-capability-backlog.md) | Missing or incomplete backend capabilities and proposed sequencing |
 | [Phase 5 proposed specs](./05a-phase5-proposed-specs.md) | Feature proposals and scope decisions for the Phase 5 backlog |
+| [Role workspace and navigation design](./05b-role-workspace-design.md) | Proposed role-specific pages, actions, and Super Admin CSV school setup |
 | [Verification and release](./06-verification-and-release.md) | Contract, integration, authorization, isolation, and release criteria |
 | [Decision register](./decisions/README.md) | Open architecture/product decisions that block implementation |
 | [Feature spec template](./templates/feature-spec-template.md) | Required format for implementation-ready feature specs |
