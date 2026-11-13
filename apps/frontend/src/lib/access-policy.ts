@@ -1,5 +1,6 @@
 import type { UserRole } from "@/types/auth";
 import type { IconName } from "@/components/ui/icon";
+import { isPlatformPage, platformPages } from "@/lib/platform-pages";
 
 export type UiCapability =
   | "overview"
@@ -17,7 +18,8 @@ export type UiCapability =
   | "finance-overview"
   | "child"
   | "learning"
-  | "settings";
+  | "settings"
+  | "platform-preview";
 
 export type WorkspaceNavigationItem = {
   label: string;
@@ -69,6 +71,7 @@ const apiAccessByCapability: Record<
   child: null,
   learning: null,
   settings: { permissions: ["school.read"], adapterReady: true },
+  "platform-preview": { permissions: [], adapterReady: true },
 };
 
 const overview: WorkspaceNavigationItem = {
@@ -151,37 +154,27 @@ const schoolAdminNavigation = [
   announcements,
 ];
 
+const platformNavigation: WorkspaceNavigationItem[] = [
+  overview,
+  schools,
+  ...(["school-setup", "subscriptions", "billing", "users", "support", "audit-log", "settings"] as const).map(
+    (key) => ({
+      label: platformPages[key].title,
+      href: `/dashboard/platform/${key}`,
+      icon: platformPages[key].icon,
+      capability: "platform-preview" as const,
+    }),
+  ),
+];
+
 export const rolePolicies = {
   super_admin: {
     homePath: "/dashboard",
     homeKind: "school",
     dataScope: "platform",
-    capabilities: [
-      "overview",
-      "schools",
-      "students",
-      "staff",
-      "classes",
-      "attendance",
-      "fees",
-      "academics",
-      "analytics",
-      "reports",
-      "settings",
-    ],
-    navigation: [
-      overview,
-      schools,
-      students,
-      staff,
-      classes,
-      attendance,
-      fees,
-      academics,
-      analytics,
-      reports,
-    ],
-    settingsEnabled: true,
+    capabilities: ["overview", "schools", "platform-preview"],
+    navigation: platformNavigation,
+    settingsEnabled: false,
   },
   school_admin: {
     homePath: "/dashboard",
@@ -356,6 +349,10 @@ export function isDashboardRouteAllowed(
 ): boolean {
   const policy = getRolePolicy(role);
   if (!policy) return false;
+  if (pathname.startsWith("/dashboard/platform/")) {
+    const section = pathname.slice("/dashboard/platform/".length);
+    return role === "super_admin" && isPlatformPage(section);
+  }
   if (
     permissionKeys !== undefined &&
     /^\/dashboard\/students\/[^/]+\/edit$/.test(pathname)

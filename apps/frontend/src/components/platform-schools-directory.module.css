@@ -16,6 +16,30 @@
   line-height: 1.5;
 }
 
+.warning {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #f1d394;
+  border-radius: 8px;
+  background: #fff8e6;
+  color: #76520c;
+  font-size: 14px;
+}
+
+.previewLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 16px;
+  border: 1px solid #e9ebf2;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.previewLinks p { flex-basis: 100%; margin: 0; color: #737b91; }
+.previewLinks a { color: #4a60d9; font-weight: 600; }
+
 @media (max-width: 760px) {
   .metrics {
     grid-template-columns: 1fr;

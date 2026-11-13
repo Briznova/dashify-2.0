@@ -17,11 +17,7 @@ export function WorkspaceHome({
 }) {
   switch (role) {
     case "super_admin":
-      return isApiMode ? (
-        <PlatformSchoolsDirectory />
-      ) : (
-        <SchoolDashboardView role={role} userName={userName} />
-      );
+      return <PlatformSchoolsDirectory overview />;
     case "school_admin":
     case "principal":
       return <SchoolDashboardView role={role} userName={userName} />;

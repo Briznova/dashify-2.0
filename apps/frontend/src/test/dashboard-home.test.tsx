@@ -122,7 +122,9 @@ describe("dashboard home composition", () => {
 
       render(<DashboardHome />);
 
-      if (["super_admin", "school_admin", "principal"].includes(role)) {
+      if (role === "super_admin") {
+        expect(screen.getByTestId("platform-schools")).toBeInTheDocument();
+      } else if (["school_admin", "principal"].includes(role)) {
         expect(screen.getByTestId("school-workspace")).toHaveAttribute(
           "data-role",
           role,

@@ -27,6 +27,8 @@ The monorepo uses these links as the source of truth for coordinated feature wor
 | [Phase 5 proposed specs](./05a-phase5-proposed-specs.md) | Feature proposals and scope decisions for the Phase 5 backlog |
 | [Role workspace and navigation design](./05b-role-workspace-design.md) | Proposed role-specific pages, actions, and Super Admin CSV school setup |
 | [Verification and release](./06-verification-and-release.md) | Contract, integration, authorization, isolation, and release criteria |
+| [Figma design reference](./07-figma-design-reference.md) | Figma file and frame links for role workspaces and related screens |
+| [Super Admin workspace LLD](./08-super-admin-workspace-lld.md) | Approved frontend previews and existing platform directory integration |
 | [Decision register](./decisions/README.md) | Open architecture/product decisions that block implementation |
 | [Feature spec template](./templates/feature-spec-template.md) | Required format for implementation-ready feature specs |
 | [Decision record template](./templates/decision-record-template.md) | Record decisions that affect contracts or architecture |

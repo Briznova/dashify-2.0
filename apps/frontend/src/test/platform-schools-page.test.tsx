@@ -35,14 +35,12 @@ describe("SchoolsPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the existing mock school directory in mock mode", () => {
+  it("uses the same directory layout in mock mode", () => {
     mocks.isApiMode = false;
 
     render(<SchoolsPage />);
 
-    expect(screen.getByTestId("mock-school-directory")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("platform-school-directory"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("platform-school-directory")).toBeInTheDocument();
+    expect(screen.queryByTestId("mock-school-directory")).not.toBeInTheDocument();
   });
 });

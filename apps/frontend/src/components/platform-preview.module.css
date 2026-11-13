@@ -1,0 +1,30 @@
+.page { display: grid; gap: 18px; }
+.warning { padding: 14px 16px; border: 1px solid #f1d394; border-radius: 8px; background: #fff8e6; color: #76520c; font-size: 14px; }
+.warning strong { margin-right: 5px; }
+.metrics, .planGrid, .columns { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.metric { display: grid; gap: 8px; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: #737b91; font-size: 13px; }
+.metric strong { color: #30364e; font-size: 25px; }
+.metric small { font-size: 12px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.button { min-height: 36px; padding: 8px 14px; border: 1px solid #dfe3ef; border-radius: 7px; background: #eef0f6; color: #687087; font-size: 13px; }
+.button:disabled { cursor: not-allowed; }
+.link { display: inline-block; margin-top: 12px; color: #4a60d9; font-size: 14px; font-weight: 600; }
+.note { margin: 0; padding: 13px 15px; border-radius: 8px; background: #eef3ff; color: #4c5f8e; font-size: 13px; }
+.empty { margin: 18px 0; color: #737b91; font-size: 14px; }
+.tableScroll { overflow-x: auto; margin-top: 18px; }
+.table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; white-space: nowrap; }
+.table th { padding: 12px; border-bottom: 1px solid var(--line); color: #737b91; font-weight: 600; }
+.table td { padding: 16px 12px; border-bottom: 1px solid var(--line); color: #737b91; }
+.example { margin: 12px 0 0; color: #737b91; font-size: 12px; }
+.details { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; font-size: 13px; }
+.details dt { color: #737b91; }
+.details dd { margin: 0; color: #414960; }
+.steps { display: grid; gap: 0; margin: 16px 0; padding: 0; list-style: none; }
+.steps li { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); color: #414960; font-size: 13px; }
+.steps small { flex: 0 0 auto; color: #788098; font-size: 12px; }
+.form { display: grid; gap: 14px; margin-top: 18px; }
+.form .button { justify-self: start; }
+.form .link { margin: 0; }
+.field { display: grid; gap: 6px; color: #414960; font-size: 13px; font-weight: 600; }
+.field input { width: 100%; padding: 10px 12px; border: 1px solid #dfe3ef; border-radius: 7px; background: #f7f8fc; color: #687087; }
+.planPrice { margin: 18px 0 0; color: #30364e; font-size: 15px; font-weight: 600; }

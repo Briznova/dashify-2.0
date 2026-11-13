@@ -30,16 +30,15 @@ const expected: Record<
     navigation: [
       "Overview",
       "Schools",
-      "Students",
-      "Staff",
-      "Classes",
-      "Attendance",
-      "Fees",
-      "Academics",
-      "Analytics",
-      "Reports",
+      "School setup and CSV import",
+      "Subscriptions",
+      "Billing and invoices",
+      "Platform users",
+      "Support",
+      "Audit log",
+      "Platform settings",
     ],
-    settings: true,
+    settings: false,
   },
   school_admin: {
     home: "/dashboard",
@@ -156,14 +155,14 @@ describe("role access policy", () => {
     expect(isDashboardRouteAllowed(path, role)).toBe(false);
   });
 
-  it.each(["super_admin", "school_admin", "principal"] as const)(
+  it.each(["school_admin", "principal"] as const)(
     "allows %s to open workspace settings",
     (role) => {
       expect(isDashboardRouteAllowed("/dashboard/settings", role)).toBe(true);
     },
   );
 
-  it.each(["teacher", "accountant", "parent", "student"] as const)(
+  it.each(["super_admin", "teacher", "accountant", "parent", "student"] as const)(
     "denies %s access to workspace settings",
     (role) => {
       expect(isDashboardRouteAllowed("/dashboard/settings", role)).toBe(false);
@@ -173,7 +172,6 @@ describe("role access policy", () => {
   it.each([
     ["school_admin", "/dashboard/customers"],
     ["teacher", "/dashboard/projects"],
-    ["super_admin", "/dashboard/projects"],
   ] as const)("preserves the %s compatibility alias %s", (role, path) => {
     expect(isDashboardRouteAllowed(path, role)).toBe(true);
   });
@@ -266,12 +264,12 @@ describe("role access policy", () => {
 
   it("limits platform navigation to the platform-school permission", () => {
     expect(getRoleNavigation("super_admin", []).map((item) => item.capability))
-      .toEqual(["overview"]);
+      .toEqual(["overview", ...Array(7).fill("platform-preview")]);
     expect(
       getRoleNavigation("super_admin", ["platform.schools.read"]).map(
         (item) => item.capability,
       ),
-    ).toEqual(["overview", "schools"]);
+    ).toEqual(["overview", "schools", ...Array(7).fill("platform-preview")]);
     expect(
       isDashboardRouteAllowed(
         "/dashboard/schools",
@@ -286,6 +284,10 @@ describe("role access policy", () => {
         ["platform.schools.read"],
       ),
     ).toBe(false);
+    expect(isDashboardRouteAllowed("/dashboard/platform/support-detail", "super_admin", [])).toBe(true);
+    expect(isDashboardRouteAllowed("/dashboard/platform/support-detail", "school_admin", ["platform.schools.read"])).toBe(false);
+    expect(isDashboardRouteAllowed("/dashboard/platform/unknown", "super_admin", [])).toBe(false);
+    expect(isDashboardRouteAllowed("/dashboard/platform/support/detail", "super_admin", [])).toBe(false);
     expect(
       isDashboardRouteAllowed(
         "/dashboard/schools",

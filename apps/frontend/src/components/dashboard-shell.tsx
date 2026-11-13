@@ -13,6 +13,7 @@ import {
   type WorkspaceNavigationItem,
 } from "@/lib/access-policy";
 import { getDashboardRoute } from "@/lib/dashboard-route";
+import { isPlatformPage, platformPages } from "@/lib/platform-pages";
 import { isApiMode } from "@/services";
 import type { UserRole } from "@/types/auth";
 import { Icon } from "./ui/icon";
@@ -174,6 +175,9 @@ export function DashboardShell({
   const settingsAvailable =
     rolePolicy?.settingsEnabled &&
     isCapabilityAvailable("settings", permissionKeys);
+  const platformSection = pathname.startsWith("/dashboard/platform/")
+    ? pathname.slice("/dashboard/platform/".length)
+    : "";
   const breadcrumbLabel =
     pathname === "/dashboard/settings"
       ? "Settings"
@@ -181,7 +185,9 @@ export function DashboardShell({
         ? "Students"
         : pathname === "/dashboard/projects"
           ? "Classes"
-          : (navigation.find(
+          : isPlatformPage(platformSection)
+            ? platformPages[platformSection].title
+            : (navigation.find(
               (item) =>
                 pathname === item.href ||
                 (item.href !== "/dashboard" &&
@@ -298,15 +304,15 @@ export function DashboardShell({
         </Link>
         <div className={styles.workspace}>
           <span className={styles.workspaceIcon}>
-            {(user.schoolName ?? "S").slice(0, 1)}
+            {(role === "super_admin" ? "D" : (user.schoolName ?? "S")).slice(0, 1)}
           </span>
           <span className={styles.workspaceText}>
-            <strong>{user.schoolName ?? "All schools"}</strong>
+            <strong>{role === "super_admin" ? "Platform administration" : (user.schoolName ?? "All schools")}</strong>
             <small>{role.replaceAll("_", " ")}</small>
           </span>
-          <span className={styles.workspaceChevron}>
+          {role !== "super_admin" && <span className={styles.workspaceChevron}>
             <Icon name="chevronDown" size={16} />
-          </span>
+          </span>}
         </div>
         <div className={styles.navLabel}>WORKSPACE</div>
         <nav className={styles.navigation} aria-label="Dashboard navigation">
@@ -437,7 +443,7 @@ export function DashboardShell({
             <strong>{breadcrumbLabel}</strong>
           </div>
           <div className={styles.topbarActions}>
-            {!isApiMode && (
+            {!isApiMode && role !== "super_admin" && (
               <div className={styles.notificationWrap}>
                 <button
                   className={styles.iconButton}

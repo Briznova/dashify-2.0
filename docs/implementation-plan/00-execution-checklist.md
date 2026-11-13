@@ -141,6 +141,7 @@ Phase 3 implementation evidence (2026-11-12): 54 frontend tests, lint, TypeScrip
 **Status:** In progress — delivered staff/teacher assignment, student editing, class/section creation, School Admin/Principal/Teacher dashboards, attendance reporting, announcements, and the read-only platform directory; other Phase 5 areas still require feature-level decisions
 **Reference:** [Backend capability backlog](./05-backend-capability-backlog.md)
 
+- [x] Product approves the Super Admin frontend design previews and integration with existing platform APIs (2026-11-13); unsupported operations remain dummy and separately gated. See [Super Admin workspace LLD](./08-super-admin-workspace-lld.md).
 - [x] Product approves all twelve remaining Phase 5 areas for prioritization (2026-11-13); this does not approve unresolved feature behavior, API contracts, permissions, or implementation details.
 - [x] Resolve the first staff-account slice using existing user accounts only; grant Teacher role only, defer invitations/credentials and other role grants, and preserve the global account on deactivation.
 - [x] Implement active-school staff profile create/update/deactivate, existing-account Teacher linkage, assignment cleanup, and audit events.
