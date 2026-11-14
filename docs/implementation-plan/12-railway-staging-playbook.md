@@ -120,7 +120,9 @@ isolation verified.
 Backend deployment settings:
 
 - Build with [`apps/backend/Dockerfile`](../../apps/backend/Dockerfile); it
-  starts `node dist/src/main` and includes the Prisma migration files.
+  installs locked dependencies, starts `node dist/src/main`, and retains the
+  Prisma CLI, seed runner, and migration files. It does not run migrations or
+  seed automatically.
   Do not assume the current `start:prod` package script is equivalent: it
   points to a different build path.
 - Pre-deploy command: `npm run prisma:deploy`. Set a bounded timeout. Railway

@@ -75,6 +75,14 @@ These commands are not a production-readiness guarantee. Complete the RLS,
 least-privilege, isolation, credential lifecycle and operational release gates
 before onboarding real data.
 
+For Railway, build the backend with its Dockerfile and configure
+`npm run prisma:deploy` as the service's pre-deploy command. The image retains
+the Prisma CLI, seed runner, and migration files for these operations; it does
+not migrate or seed during image builds or application startup. Run the
+platform administrator seed separately after the migration succeeds. See the
+[staging playbook](../../docs/implementation-plan/12-railway-staging-playbook.md)
+for service variables and the deployment sequence.
+
 School Admin account creation requires the separate `platform.school-admins.create`
 grant and a server-side `SCHOOL_ADMIN_DEFAULT_PASSWORD` of at least 12
 characters. Keep the password in deployment-managed secret configuration, not
