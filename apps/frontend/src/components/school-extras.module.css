@@ -140,12 +140,96 @@
   cursor: wait;
 }
 
+.gradeScaleYear,
+.gradeBandRow label {
+  display: grid;
+  gap: 6px;
+  color: #646c82;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.gradeScaleYear {
+  max-width: 360px;
+  margin-bottom: 16px;
+}
+
+.gradeScaleYear select,
+.gradeBandRow input {
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #e8eaf0;
+  border-radius: 6px;
+  color: #454c62;
+  font: inherit;
+}
+
+.gradeScaleRows {
+  display: grid;
+  gap: 10px;
+}
+
+.gradeBandRow {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) repeat(2, minmax(100px, .7fr)) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #eceef4;
+  border-radius: 8px;
+  background: #fcfcfe;
+}
+
+.gradeScaleActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.gradeScaleActions button,
+.removeGradeBand {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  background: #5265de;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gradeScaleActions .addGradeBand,
+.removeGradeBand {
+  border: 1px solid #dfe3ef;
+  background: #fff;
+  color: #46506a;
+}
+
+.gradeScaleActions button:disabled,
+.removeGradeBand:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.gradeScaleError,
+.emptyState {
+  color: #8a4860;
+  font-size: 13px;
+}
+
 @media (max-width: 1000px) {
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .createYearForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .gradeBandRow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -156,6 +240,10 @@
   }
 
   .createYearForm {
+    grid-template-columns: 1fr;
+  }
+
+  .gradeBandRow {
     grid-template-columns: 1fr;
   }
 }

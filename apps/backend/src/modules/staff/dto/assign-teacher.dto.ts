@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsOptional, IsString, IsUUID, MaxLength } from "class-validator";
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from "class-validator";
 
 export class AssignTeacherDto {
   @ApiProperty({
@@ -36,4 +42,12 @@ export class AssignTeacherDto {
   @IsString()
   @MaxLength(80)
   subject?: string;
+
+  @ApiPropertyOptional({
+    description: "Whether this teacher is the designated class teacher for the section.",
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isClassTeacher?: boolean;
 }

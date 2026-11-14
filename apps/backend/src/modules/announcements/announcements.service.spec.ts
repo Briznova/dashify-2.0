@@ -10,6 +10,8 @@ describe("AnnouncementsService", () => {
   let service: AnnouncementsService;
   let withTenant: jest.Mock;
   let tx: {
+    schoolMembership: { findMany: jest.Mock };
+    notification: { createMany: jest.Mock };
     announcement: {
       findMany: jest.Mock;
       findFirst: jest.Mock;
@@ -22,6 +24,10 @@ describe("AnnouncementsService", () => {
 
   beforeEach(() => {
     tx = {
+      schoolMembership: {
+        findMany: jest.fn().mockResolvedValue([{ userId: "teacher-1" }]),
+      },
+      notification: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
       announcement: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn(),
@@ -101,6 +107,7 @@ describe("AnnouncementsService", () => {
       id: announcementId,
       schoolId,
       status: AnnouncementStatus.PUBLISHED,
+      title: "Term notice",
     });
 
     await service.publish(schoolId, actorId, announcementId);
@@ -121,6 +128,17 @@ describe("AnnouncementsService", () => {
       }),
     );
     expect(tx.auditLog.create).toHaveBeenCalled();
+    expect(tx.notification.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          userId: "teacher-1",
+          schoolId,
+          type: "ANNOUNCEMENT",
+          title: "Term notice",
+          body: "A new school announcement has been published.",
+        },
+      ],
+    });
   });
 
   it("rejects publishing a missing or audience-targeted announcement", async () => {

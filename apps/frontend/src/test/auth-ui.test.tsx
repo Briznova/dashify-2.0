@@ -212,18 +212,18 @@ describe("auth session and workspace UI", () => {
     });
   });
 
-  it("fills local seeded credentials when a development account is selected", () => {
+  it("fills configured local credentials when a development account is selected", () => {
     render(
       <AuthFlow
         mode="sign-in"
-        devSeededAccounts={[
+        devLoginAccounts={[
           {
-            role: "School admin (seeded)",
+            role: "School Admin (local)",
             email: "school-admin@local.test",
             password: "local-only-password",
           },
           {
-            role: "Teacher (seeded)",
+            role: "Teacher (local)",
             email: "teacher@local.test",
             password: "teacher-only-password",
           },
@@ -231,7 +231,7 @@ describe("auth session and workspace UI", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Teacher (seeded)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Teacher (local)" }));
 
     expect(screen.getByLabelText("Work email")).toHaveValue(
       "teacher@local.test",

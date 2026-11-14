@@ -1,0 +1,23 @@
+.selector {
+  display: grid;
+  gap: 6px;
+  min-width: min(230px, 100%);
+  color: #68728a;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.selector select {
+  min-height: 40px;
+  border: 1px solid #dfe4ee;
+  border-radius: 9px;
+  background: #fff;
+  color: #202a42;
+  font: inherit;
+  padding: 0 12px;
+}
+
+.selector select:disabled {
+  background: #f5f6fa;
+  color: #8a93a6;
+}

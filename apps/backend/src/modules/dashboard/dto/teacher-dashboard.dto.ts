@@ -16,8 +16,17 @@ export class TeacherDashboardAssignmentDto {
   @ApiProperty({ nullable: true })
   subject!: string | null;
 
-  @ApiProperty({ enum: ["OPEN", "CLOSED"], nullable: true })
-  sessionStatus!: "OPEN" | "CLOSED" | null;
+  @ApiProperty()
+  isClassTeacher!: boolean;
+
+  @ApiProperty({ nullable: true })
+  classTeacherName!: string | null;
+
+  @ApiProperty({ minimum: 0 })
+  studentCount!: number;
+
+  @ApiProperty({ enum: ["DRAFT", "SUBMITTED", "OPEN", "CLOSED"], nullable: true })
+  sessionStatus!: "DRAFT" | "SUBMITTED" | "OPEN" | "CLOSED" | null;
 
   @ApiProperty({ minimum: 0, nullable: true })
   unmarkedCount!: number | null;
@@ -32,6 +41,15 @@ export class TeacherDashboardDto {
 
   @ApiProperty({ format: "date" })
   localDate!: string;
+
+  @ApiProperty({ format: "uuid", nullable: true })
+  academicYearId!: string | null;
+
+  @ApiProperty({ nullable: true })
+  academicYearName!: string | null;
+
+  @ApiProperty({ nullable: true })
+  academicYearStatus!: string | null;
 
   @ApiProperty({ type: [TeacherDashboardAssignmentDto] })
   assignments!: TeacherDashboardAssignmentDto[];

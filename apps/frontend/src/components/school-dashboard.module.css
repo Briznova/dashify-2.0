@@ -1141,6 +1141,46 @@
   cursor: wait;
 }
 
+.createStructureForm .classTeacherToggle {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 8px;
+}
+
+.createStructureForm .classTeacherToggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.teacherAssignmentList {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.teacherAssignmentList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #eceef4;
+  border-radius: 8px;
+}
+
+.teacherAssignmentList li > span {
+  display: grid;
+  gap: 4px;
+}
+
+.teacherAssignmentList small {
+  color: #788196;
+}
+
 .structureFormError,
 .structureReadOnly {
   margin: 10px 0 0;

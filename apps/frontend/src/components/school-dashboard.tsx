@@ -24,6 +24,8 @@ import {
   useUpdateSchoolSettings,
   useUpdateSchoolProfile,
   useSaveStaff,
+  useTeacherActions,
+  useTeacherAssignments,
 } from "@/hooks/use-school-data";
 import { useAuthSession } from "@/hooks/use-auth";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -463,8 +465,12 @@ export function StaffDirectory() {
 function SchoolStaffDirectory() {
   const resource = useStaff();
   const { session } = useAuthSession();
+  const canManage = Boolean(session?.scope === "school" && session.activeWorkspaceRole === "school_admin" && session.permissionKeys.includes("staff.manage"));
   const saveStaff = useSaveStaff();
   const deactivateStaff = useDeactivateStaff();
+  const teacherActions = useTeacherActions();
+  const assignments = useTeacherAssignments(canManage);
+  const classrooms = useClassrooms(isApiMode && canManage);
   const [editing, setEditing] = useState<StaffMember | null>(null);
   const [employeeCode, setEmployeeCode] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -477,7 +483,14 @@ function SchoolStaffDirectory() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [created, setCreated] = useState(false);
-  const canManage = Boolean(session?.scope === "school" && session.activeWorkspaceRole === "school_admin" && session.permissionKeys.includes("staff.manage"));
+  const [assignmentStaffId, setAssignmentStaffId] = useState("");
+  const [assignmentClassId, setAssignmentClassId] = useState("");
+  const [assignmentSectionId, setAssignmentSectionId] = useState("");
+  const [assignmentSubject, setAssignmentSubject] = useState("");
+  const [isClassTeacher, setIsClassTeacher] = useState(false);
+  const assignmentClass = classrooms.data?.find(
+    (item) => item.id === assignmentClassId,
+  );
   const departments = useDepartments(session?.activeSchool?.id, isApiMode && canManage);
 
   function resetForm() {
@@ -561,6 +574,24 @@ function SchoolStaffDirectory() {
     if (await deactivateStaff.deactivate(row.id)) resource.refresh();
   }
 
+  async function handleAssignTeacher(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!assignmentStaffId || !assignmentClassId) return;
+    const saved = await teacherActions.assignTeacher({
+      staffId: assignmentStaffId,
+      classId: assignmentClassId,
+      ...(assignmentSectionId ? { sectionId: assignmentSectionId } : {}),
+      ...(assignmentSubject.trim()
+        ? { subject: assignmentSubject.trim() }
+        : {}),
+      isClassTeacher,
+    });
+    if (saved) {
+      assignments.refresh();
+      setAssignmentSubject("");
+    }
+  }
+
   const columns: Column<StaffMember>[] = [
     { heading: "STAFF MEMBER", render: (row) => <span className={styles.tablePerson}><i>{row.name.split(" ").map((part) => part[0]).join("")}</i><span><strong>{row.name}</strong><small>{row.email}</small></span></span> },
     { heading: "POSITION", render: (row) => row.position },
@@ -617,6 +648,131 @@ function SchoolStaffDirectory() {
             {created && <p role="status">Teacher account created. Share the initial password securely.</p>}
             {saveStaff.error && <p className={styles.structureFormError} role="alert">{saveStaff.error}</p>}
             {deactivateStaff.error && <p className={styles.structureFormError} role="alert">{deactivateStaff.error}</p>}
+          </Panel>
+          <Panel
+            title="Class and section assignments"
+            description="Assign Teachers to active classes or sections. A section can have only one designated class teacher."
+          >
+            <ResourceState
+              error={assignments.error ?? classrooms.error}
+              isLoading={assignments.isLoading || classrooms.isLoading}
+              onRetry={() => {
+                assignments.refresh();
+                classrooms.refresh();
+              }}
+            />
+            <form
+              className={styles.createStructureForm}
+              onSubmit={(event) => void handleAssignTeacher(event)}
+            >
+              <label>
+                Teacher
+                <select
+                  value={assignmentStaffId}
+                  onChange={(event) => setAssignmentStaffId(event.target.value)}
+                  required
+                >
+                  <option value="">Select a teacher</option>
+                  {(resource.data ?? [])
+                    .filter((member) => member.status === "Active")
+                    .map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                Class
+                <select
+                  value={assignmentClassId}
+                  onChange={(event) => {
+                    setAssignmentClassId(event.target.value);
+                    setAssignmentSectionId("");
+                  }}
+                  required
+                >
+                  <option value="">Select a class</option>
+                  {(classrooms.data ?? [])
+                    .filter((item) => item.isActive)
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                Section (optional)
+                <select
+                  value={assignmentSectionId}
+                  onChange={(event) => setAssignmentSectionId(event.target.value)}
+                  required={isClassTeacher}
+                >
+                  <option value="">All active sections in class</option>
+                  {(assignmentClass?.sections ?? [])
+                    .filter((section) => section.isActive)
+                    .map((section) => (
+                      <option key={section.id} value={section.id}>
+                        {section.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                Subject (optional)
+                <input
+                  value={assignmentSubject}
+                  onChange={(event) => setAssignmentSubject(event.target.value)}
+                  maxLength={80}
+                />
+              </label>
+              <label className={styles.classTeacherToggle}>
+                <input
+                  type="checkbox"
+                  checked={isClassTeacher}
+                  onChange={(event) => setIsClassTeacher(event.target.checked)}
+                />
+                Designate as class teacher for this section
+              </label>
+              <button
+                type="submit"
+                disabled={
+                  teacherActions.isPending ||
+                  !assignmentStaffId ||
+                  !assignmentClassId ||
+                  (isClassTeacher && !assignmentSectionId)
+                }
+              >
+                {teacherActions.isPending ? "Saving..." : "Save assignment"}
+              </button>
+            </form>
+            {teacherActions.error && (
+              <p className={styles.structureFormError} role="alert">
+                {teacherActions.error}
+              </p>
+            )}
+            {assignments.data && assignments.data.length > 0 && (
+              <ul className={styles.teacherAssignmentList}>
+                {assignments.data.map((assignment) => (
+                  <li key={assignment.id}>
+                    <span>
+                      <strong>{assignment.staffName}</strong>
+                      <small>
+                        {assignment.className}
+                        {assignment.sectionName
+                          ? ` · ${assignment.sectionName}`
+                          : " · All sections"}
+                        {assignment.subject ? ` · ${assignment.subject}` : ""}
+                      </small>
+                    </span>
+                    {assignment.isClassTeacher && (
+                      <StatusBadge variant="success">Class teacher</StatusBadge>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </Panel>
         </div>
       )}

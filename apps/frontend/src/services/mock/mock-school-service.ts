@@ -29,6 +29,19 @@ import type {
   SchoolSettingsData,
   SchoolProfile,
   TeacherDashboard,
+  TeacherSection,
+  TeacherAttendance,
+  TeacherAttendanceStatus,
+  TeacherAssessment,
+  TeacherAssessmentResults,
+  TeacherAssessmentType,
+  TeacherAcademicYear,
+  TeacherSections,
+  TeacherGradeBand,
+  TeacherGradeScale,
+  TeacherNotifications,
+  TeacherAssignment,
+  AssignTeacherInput,
   UpdateStaffInput,
   UpdateSchoolProfileInput,
   MarkAttendanceInput,
@@ -49,6 +62,35 @@ const mockAnnouncements: Announcement[] = [
     createdAt: "2026-04-03T07:45:00.000Z",
   },
 ];
+
+const teacherSections: TeacherSection[] = [
+  {
+    id: "SECTION-A",
+    name: "Section A",
+    classId: "CLASS-08",
+    className: "Grade 8",
+    subject: "Mathematics",
+    isClassTeacher: true,
+    classTeacherName: "Avery Johnson",
+    studentCount: 3,
+  },
+];
+const teacherRoster = [
+  { studentId: "learner-001", rollNumber: "01", name: "Learner 01" },
+  { studentId: "learner-002", rollNumber: "02", name: "Learner 02" },
+  { studentId: "learner-003", rollNumber: "03", name: "Learner 03" },
+];
+const teacherAttendance = new Map<
+  string,
+  Map<string, { status: TeacherAttendanceStatus; remarks: string | null }>
+>();
+const teacherAttendanceStatuses = new Map<string, "DRAFT" | "SUBMITTED">();
+let teacherAssessments: TeacherAssessment[] = [];
+const teacherScores = new Map<
+  string,
+  Map<string, { score: number; feedback: string | null }>
+>();
+const mockGradeScales = new Map<string, TeacherGradeScale>();
 
 function delay(signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -285,12 +327,31 @@ const metricsByRole: Record<SchoolRole, SchoolOverview["metrics"]> = {
 };
 
 export class MockSchoolService implements SchoolService {
-  async getTeacherDashboard(signal?: AbortSignal): Promise<TeacherDashboard> {
+  async getTeacherAcademicYears(
+    signal?: AbortSignal,
+  ): Promise<TeacherAcademicYear[]> {
+    await delay(signal);
+    return [{
+      id: "YEAR-2025-26",
+      name: "2025-26",
+      startDate: "2025-04-01",
+      endDate: "2027-03-31",
+      status: "ACTIVE",
+    }];
+  }
+
+  async getTeacherDashboard(
+    academicYearId?: string,
+    signal?: AbortSignal,
+  ): Promise<TeacherDashboard> {
     await delay(signal);
     return {
       schoolId: "SCH-001",
       schoolName: "Northstar Academy",
       localDate: "2026-04-03",
+      academicYearId: academicYearId ?? "YEAR-2025-26",
+      academicYearName: "2025-26",
+      academicYearStatus: "ACTIVE",
       assignments: [
         {
           id: "CLASS-08-SECTION-A",
@@ -299,10 +360,389 @@ export class MockSchoolService implements SchoolService {
           sectionId: "SECTION-A",
           sectionName: "Section A",
           subject: "Mathematics",
+          studentCount: teacherRoster.length,
+          isClassTeacher: true,
+          classTeacherName: "Avery Johnson",
           sessionStatus: "OPEN",
           unmarkedCount: 3,
         },
       ],
+    };
+  }
+
+  async getTeacherSections(
+    academicYearId?: string,
+    signal?: AbortSignal,
+  ): Promise<TeacherSections> {
+    await delay(signal);
+    return {
+      academicYear: {
+        id: academicYearId ?? "YEAR-2025-26",
+        name: "2025-26",
+        status: "ACTIVE",
+      },
+      sections: teacherSections.map((section) => ({ ...section })),
+    };
+  }
+
+  async getTeacherAttendance(
+    _academicYearId: string,
+    sectionId: string,
+    date: string,
+    signal?: AbortSignal,
+  ): Promise<TeacherAttendance> {
+    await delay(signal);
+    const section = teacherSections.find((item) => item.id === sectionId);
+    if (!section) throw new Error("Assigned section not found.");
+    const key = `${sectionId}:${date}`;
+    const records = teacherAttendance.get(key);
+    return {
+      academicYear: {
+        id: "YEAR-2025-26",
+        name: "2025-26",
+        status: "ACTIVE",
+      },
+      section: {
+        id: section.id,
+        name: section.name,
+        classId: section.classId,
+        className: section.className,
+      },
+      date,
+      status: teacherAttendanceStatuses.get(key) ?? null,
+      canEdit: true,
+      students: teacherRoster.map((student) => ({
+        ...student,
+        status: records?.get(student.studentId)?.status ?? null,
+        remarks: records?.get(student.studentId)?.remarks ?? null,
+      })),
+    };
+  }
+
+  async saveTeacherAttendanceDraft(input: {
+    academicYearId: string;
+    sectionId: string;
+    date: string;
+    records: {
+      studentId: string;
+      status: TeacherAttendanceStatus;
+      remarks?: string;
+    }[];
+  }): Promise<{
+    sessionId: string;
+    sectionId: string;
+    date: string;
+    recordCount: number;
+    status: "DRAFT" | "SUBMITTED";
+  }> {
+    await delay();
+    const key = `${input.sectionId}:${input.date}`;
+    if (!teacherSections.some((section) => section.id === input.sectionId)) {
+      throw new Error("Assigned section not found.");
+    }
+    const studentIds = new Set(input.records.map((record) => record.studentId));
+    if (
+      studentIds.size !== input.records.length ||
+      input.records.length === 0 ||
+      input.records.some(
+        (record) =>
+          !teacherRoster.some((student) => student.studentId === record.studentId),
+      )
+    ) {
+      throw new Error("Attendance drafts may contain unique students from the assigned roster.");
+    }
+    const records = teacherAttendance.get(key) ?? new Map();
+    input.records.forEach((record) =>
+      records.set(record.studentId, {
+        status: record.status,
+        remarks: record.remarks?.trim() || null,
+      }),
+    );
+    teacherAttendance.set(key, records);
+    const status = teacherAttendanceStatuses.get(key) ?? "DRAFT";
+    teacherAttendanceStatuses.set(key, status);
+    return {
+      sessionId: `mock-attendance-${Date.now()}`,
+      sectionId: input.sectionId,
+      date: input.date,
+      recordCount: input.records.length,
+      status,
+    };
+  }
+
+  async submitTeacherAttendance(input: {
+    academicYearId: string;
+    sectionId: string;
+    date: string;
+  }) {
+    await delay();
+    const key = `${input.sectionId}:${input.date}`;
+    const records = teacherAttendance.get(key);
+    if (!records?.size) throw new Error("Mark at least one student before submitting attendance.");
+    teacherAttendanceStatuses.set(key, "SUBMITTED");
+    return {
+      sessionId: `mock-attendance-${Date.now()}`,
+      sectionId: input.sectionId,
+      date: input.date,
+      recordCount: records.size,
+      status: "SUBMITTED" as const,
+    };
+  }
+
+  async getTeacherAssessments(
+    academicYearId?: string,
+    sectionId?: string,
+    signal?: AbortSignal,
+  ): Promise<TeacherAssessment[]> {
+    await delay(signal);
+    return teacherAssessments
+      .filter(
+        (assessment) =>
+          (!academicYearId || assessment.academicYearId === academicYearId) &&
+          (!sectionId || assessment.sectionId === sectionId),
+      )
+      .map((assessment) => ({ ...assessment }));
+  }
+
+  async createTeacherAssessment(input: {
+    academicYearId: string;
+    sectionId: string;
+    type: TeacherAssessmentType;
+    title: string;
+    description?: string;
+    dueDate: string;
+    startTime?: string;
+    durationMinutes?: number;
+    maxScore: number;
+    passMark: number;
+  }): Promise<TeacherAssessment> {
+    await delay();
+    const section = teacherSections.find((item) => item.id === input.sectionId);
+    if (!section) throw new Error("Assigned section not found.");
+    if (!input.title.trim() || !Number.isInteger(input.maxScore) || input.maxScore < 1 ||
+      !Number.isInteger(input.passMark) || input.passMark < 0 ||
+      input.passMark > input.maxScore) {
+      throw new Error("Provide a title and a positive whole-number maximum score.");
+    }
+    if (
+      (input.type === "TEST" &&
+        (!input.startTime ||
+          !Number.isInteger(input.durationMinutes) ||
+          (input.durationMinutes ?? 0) < 1 ||
+          (input.durationMinutes ?? 0) > 1440)) ||
+      (input.type !== "TEST" &&
+        (input.startTime !== undefined || input.durationMinutes !== undefined))
+    ) {
+      throw new Error("Tests require a start time and duration.");
+    }
+    const assessment: TeacherAssessment = {
+      id: `mock-assessment-${Date.now()}`,
+      sectionId: section.id,
+      type: input.type,
+      status: "DRAFT",
+      title: input.title.trim(),
+      description: input.description?.trim() || null,
+      dueDate: input.dueDate,
+      startTime: input.startTime ?? null,
+      durationMinutes: input.durationMinutes ?? null,
+      maxScore: input.maxScore,
+      passMark: input.passMark,
+      academicYearId: input.academicYearId,
+      publishedAt: null,
+      resultsStatus: "DRAFT",
+      className: section.className,
+      sectionName: section.name,
+      resultCount: 0,
+    };
+    teacherAssessments = [assessment, ...teacherAssessments];
+    return { ...assessment };
+  }
+
+  async publishTeacherAssessment(id: string): Promise<TeacherAssessment> {
+    await delay();
+    const assessment = teacherAssessments.find((item) => item.id === id);
+    if (!assessment) throw new Error("Assessment not found.");
+    if (assessment.status !== "DRAFT") {
+      throw new Error("Only draft assessments can be published.");
+    }
+    assessment.status = "PUBLISHED";
+    assessment.publishedAt = new Date().toISOString();
+    return { ...assessment };
+  }
+
+  async getTeacherResults(
+    assessmentId: string,
+    signal?: AbortSignal,
+  ): Promise<TeacherAssessmentResults> {
+    await delay(signal);
+    const assessment = teacherAssessments.find(
+      (item) => item.id === assessmentId && item.status === "PUBLISHED",
+    );
+    if (!assessment) throw new Error("Published assessment not found.");
+    const scores = teacherScores.get(assessmentId);
+    return {
+      assessment: {
+        id: assessment.id,
+        title: assessment.title,
+        type: assessment.type,
+        dueDate: assessment.dueDate,
+        startTime: assessment.startTime,
+        durationMinutes: assessment.durationMinutes,
+        maxScore: assessment.maxScore,
+        passMark: assessment.passMark,
+        academicYearId: assessment.academicYearId,
+        resultsStatus: assessment.resultsStatus,
+        className: assessment.className,
+        sectionName: assessment.sectionName,
+        academicYearName: "2025-26",
+        resultsPublishedAt:
+          assessment.resultsStatus === "PUBLISHED" ? new Date().toISOString() : null,
+        gradesConfigured: Boolean(
+          mockGradeScales.get(assessment.academicYearId ?? "")?.bands.length,
+        ),
+      },
+      students: teacherRoster.map((student) => ({
+        ...student,
+        score: scores?.get(student.studentId)?.score ?? null,
+        feedback: scores?.get(student.studentId)?.feedback ?? null,
+        updatedAt: null,
+        passed:
+          scores?.has(student.studentId) && assessment.passMark !== null
+            ? scores.get(student.studentId)!.score >= assessment.passMark
+            : null,
+        grade: null,
+      })),
+    };
+  }
+
+  async saveTeacherResults(
+    assessmentId: string,
+    input: {
+      records: {
+        studentId: string;
+        score: number;
+        feedback?: string;
+      }[];
+    },
+  ): Promise<{ assessmentId: string; savedCount: number }> {
+    await delay();
+    const assessment = teacherAssessments.find(
+      (item) => item.id === assessmentId && item.status === "PUBLISHED",
+    );
+    if (!assessment) throw new Error("Published assessment not found.");
+    const studentIds = new Set(input.records.map((record) => record.studentId));
+    if (
+      studentIds.size !== input.records.length ||
+      input.records.some(
+        (record) =>
+          !teacherRoster.some((student) => student.studentId === record.studentId) ||
+          !Number.isInteger(record.score) ||
+          record.score < 0 ||
+          record.score > assessment.maxScore,
+      )
+    ) {
+      throw new Error("Scores must be unique, valid, and within the assessment maximum.");
+    }
+    const scores =
+      teacherScores.get(assessmentId) ??
+      new Map<string, { score: number; feedback: string | null }>();
+    input.records.forEach((record) =>
+      scores.set(record.studentId, {
+        score: record.score,
+        feedback: record.feedback?.trim() || null,
+      }),
+    );
+    teacherScores.set(assessmentId, scores);
+    assessment.resultCount = scores.size;
+    return { assessmentId, savedCount: input.records.length };
+  }
+
+  async publishTeacherResults(assessmentId: string) {
+    await delay();
+    const assessment = teacherAssessments.find((item) => item.id === assessmentId);
+    const scores = teacherScores.get(assessmentId);
+    if (!assessment || !scores?.size) {
+      throw new Error("Save at least one result before publishing results.");
+    }
+    assessment.resultsStatus = "PUBLISHED";
+    return {
+      assessmentId,
+      resultsStatus: "PUBLISHED" as const,
+      publishedCount: scores.size,
+    };
+  }
+
+  async getGradeScale(
+    academicYearId: string,
+    signal?: AbortSignal,
+  ): Promise<TeacherGradeScale> {
+    await delay(signal);
+    return mockGradeScales.get(academicYearId) ?? {
+      academicYearId,
+      academicYearName: "2025-26",
+      bands: [],
+    };
+  }
+
+  async saveGradeScale(
+    academicYearId: string,
+    bands: TeacherGradeBand[],
+  ): Promise<TeacherGradeScale> {
+    await delay();
+    const scale = {
+      academicYearId,
+      academicYearName: "2025-26",
+      bands: bands.map((band) => ({ ...band })),
+    };
+    mockGradeScales.set(academicYearId, scale);
+    return scale;
+  }
+
+  async getNotifications(
+    signal?: AbortSignal,
+  ): Promise<TeacherNotifications> {
+    await delay(signal);
+    return { notifications: [], unreadCount: 0 };
+  }
+
+  async markNotificationRead(): Promise<void> {
+    await delay();
+  }
+
+  async markAllNotificationsRead(): Promise<number> {
+    await delay();
+    return 0;
+  }
+
+  async getTeacherAssignments(
+    signal?: AbortSignal,
+  ): Promise<TeacherAssignment[]> {
+    await delay(signal);
+    return [];
+  }
+
+  async assignTeacher(
+    input: AssignTeacherInput,
+  ): Promise<TeacherAssignment> {
+    await delay();
+    const staffMember = staff.find((member) => member.id === input.staffId);
+    const classroom = classrooms.find((item) => item.id === input.classId);
+    const section = classroom?.sections.find(
+      (item) => item.id === input.sectionId,
+    );
+    if (!staffMember || !classroom) {
+      throw new Error("Choose an active teacher and class.");
+    }
+    return {
+      id: `mock-assignment-${Date.now()}`,
+      staffId: input.staffId,
+      classId: input.classId,
+      sectionId: input.sectionId ?? null,
+      subject: input.subject ?? null,
+      isClassTeacher: input.isClassTeacher,
+      staffName: staffMember.name,
+      className: classroom.name,
+      sectionName: section?.name ?? null,
     };
   }
 

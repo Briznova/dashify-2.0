@@ -19,7 +19,10 @@ export type UiCapability =
   | "child"
   | "learning"
   | "settings"
-  | "platform-preview";
+  | "platform-preview"
+  | "teacher-attendance"
+  | "teacher-results"
+  | "teacher-assessments";
 
 export type WorkspaceNavigationItem = {
   label: string;
@@ -65,6 +68,18 @@ const apiAccessByCapability: Record<
   reports: { permissions: ["reports.read"], adapterReady: true },
   "teaching-day": {
     permissions: ["dashboard.teacher.read"],
+    adapterReady: true,
+  },
+  "teacher-attendance": {
+    permissions: ["teacher.attendance.read"],
+    adapterReady: true,
+  },
+  "teacher-results": {
+    permissions: ["teacher.results.read"],
+    adapterReady: true,
+  },
+  "teacher-assessments": {
+    permissions: ["teacher.assessments.read"],
     adapterReady: true,
   },
   "finance-overview": null,
@@ -139,6 +154,30 @@ const reports: WorkspaceNavigationItem = {
   href: "/dashboard/reports",
   icon: "file",
   capability: "reports",
+};
+const teacherAttendance: WorkspaceNavigationItem = {
+  label: "Attendance",
+  href: "/dashboard/teacher/attendance",
+  icon: "calendarCheck",
+  capability: "teacher-attendance",
+};
+const teacherResults: WorkspaceNavigationItem = {
+  label: "Results",
+  href: "/dashboard/teacher/results",
+  icon: "graduationCap",
+  capability: "teacher-results",
+};
+const teacherAssessments: WorkspaceNavigationItem = {
+  label: "Assignments / Exam",
+  href: "/dashboard/teacher/assessments",
+  icon: "book",
+  capability: "teacher-assessments",
+};
+const teacherNotices: WorkspaceNavigationItem = {
+  label: "School notices",
+  href: "/dashboard/announcements",
+  icon: "bell",
+  capability: "announcements",
 };
 
 const schoolNavigation = [
@@ -220,25 +259,23 @@ export const rolePolicies = {
     homeKind: "portal",
     dataScope: "assigned-classes",
     capabilities: [
-      "overview",
       "teaching-day",
+      "teacher-attendance",
+      "teacher-results",
+      "teacher-assessments",
       "announcements",
-      "classes",
-      "attendance",
-      "academics",
     ],
     navigation: [
-      overview,
       {
-        label: "My teaching day",
+        label: "Home",
         href: "/dashboard/teacher",
-        icon: "user",
+        icon: "home",
         capability: "teaching-day",
       },
-      classes,
-      attendance,
-      academics,
-      announcements,
+      teacherAttendance,
+      teacherResults,
+      teacherAssessments,
+      teacherNotices,
     ],
     settingsEnabled: false,
   },
@@ -383,10 +420,24 @@ export function isDashboardRouteAllowed(
   }
 
   const normalizedPath = dashboardAliases[pathname] ?? pathname;
-  return getRoleNavigation(role, permissionKeys).some(
+  const homeHasChildRoutes = policy.navigation.some(({ href }) =>
+    href.startsWith(`${policy.homePath}/`),
+  );
+  const matchingNavigation = policy.navigation.filter(
     ({ href }) =>
       normalizedPath === href ||
-      (href !== "/dashboard" && normalizedPath.startsWith(`${href}/`)),
+      (href !== "/dashboard" &&
+        !(homeHasChildRoutes && href === policy.homePath) &&
+        normalizedPath.startsWith(`${href}/`)),
+  );
+  const longestMatch = matchingNavigation.reduce(
+    (longest, item) => Math.max(longest, item.href.length),
+    0,
+  );
+  return matchingNavigation.some(
+    (item) =>
+      item.href.length === longestMatch &&
+      isCapabilityAvailable(item.capability, permissionKeys),
   );
 }
 

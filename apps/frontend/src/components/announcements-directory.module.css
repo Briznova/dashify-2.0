@@ -21,6 +21,7 @@
 }
 
 .form input,
+.form select,
 .form textarea {
   width: 100%;
   padding: 10px 12px;
@@ -34,6 +35,17 @@
 
 .form textarea {
   resize: vertical;
+}
+
+.infoNotice {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #dfeafe;
+  border-radius: 7px;
+  background: #f2f7ff;
+  color: #426db9;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .form button,
@@ -124,7 +136,95 @@
   color: #a83232;
 }
 
+.teacherPage {
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+  align-content: start;
+  gap: 20px;
+}
+
+.teacherPage > header {
+  grid-column: 1 / -1;
+}
+
+.teacherCreatePanel {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.teacherDraftPanel {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.teacherPublishedPanel {
+  grid-column: 1;
+  grid-row: 2 / span 2;
+}
+
+.teacherPublishedWide {
+  grid-column: 1 / -1;
+  grid-row: auto;
+}
+
+.teacherPage > header h1 {
+  color: #172033;
+}
+
+.teacherPage > header {
+  margin-bottom: 0;
+}
+
+.teacherPanel {
+  border-color: #e4e8ef;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.teacherPanel :global(h2) {
+  color: #263044;
+  font-size: 15px;
+}
+
+.teacherPanel :global(header p) {
+  color: #7d8798;
+  font-size: 12px;
+}
+
+.teacherList {
+  gap: 0;
+}
+
+.teacherItem {
+  padding: 16px 0;
+  border: 0;
+  border-bottom: 1px solid #edf0f4;
+  border-radius: 0;
+}
+
+.teacherItem:first-child {
+  padding-top: 4px;
+}
+
+.teacherItem .body {
+  margin-top: 8px;
+  color: #6f7a8d;
+  font-size: 13px;
+}
+
 @media (max-width: 560px) {
+  .teacherPage {
+    grid-template-columns: 1fr;
+  }
+
+  .teacherPage > header,
+  .teacherCreatePanel,
+  .teacherDraftPanel,
+  .teacherPublishedPanel,
+  .teacherPublishedWide {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
   .itemHeader,
   .itemFooter {
     align-items: flex-start;

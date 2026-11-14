@@ -1,0 +1,780 @@
+openapi: 3.1.0
+info:
+  title: Dashify Teacher Workspace API
+  version: 1.0.0
+  description: Assignment-scoped Teacher workspace for the authenticated active school.
+servers:
+  - url: /api/v1
+security:
+  - accessCookie: []
+paths:
+  /teacher/academic-years:
+    get:
+      operationId: listTeacherAcademicYears
+      summary: List academic years available to the authenticated teacher
+      x-required-permission: teacher.classes.read
+      x-tenant-scope: authenticated active school and active teacher profile
+      responses:
+        "200":
+          description: School academic years in reverse chronological order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeacherAcademicYear"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /teacher/sections:
+    get:
+      operationId: listTeacherSections
+      summary: List active sections assigned to the authenticated teacher
+      x-required-permission: teacher.classes.read
+      x-tenant-scope: authenticated active school
+      parameters:
+        - $ref: "#/components/parameters/AcademicYearIdQuery"
+      responses:
+        "200":
+          description: Active assigned sections
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherSections"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /teacher/attendance:
+    get:
+      operationId: getTeacherAttendance
+      summary: Read an assigned section's roster and attendance for a calendar date
+      x-required-permission: teacher.attendance.read
+      x-tenant-scope: authenticated active school and active teacher assignment
+      parameters:
+        - name: sectionId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/AcademicYearIdQuery"
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Date-specific roster and attendance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherAttendance"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /teacher/attendance/draft:
+    put:
+      operationId: saveTeacherAttendanceDraft
+      summary: Create or update today's assigned-section attendance register
+      x-required-permission: teacher.attendance.mark
+      x-tenant-scope: authenticated active school and active teacher assignment
+      parameters:
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveTeacherAttendanceDraft"
+      responses:
+        "200":
+          description: Attendance draft saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceDraft"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /teacher/assessments:
+    get:
+      operationId: listTeacherAssessments
+      summary: List teacher-created assignments, exams, and tests in active assigned sections
+      x-required-permission: teacher.assessments.read
+      x-tenant-scope: authenticated active school and active teacher assignment
+      parameters:
+        - $ref: "#/components/parameters/AcademicYearIdQuery"
+        - name: sectionId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Teacher-created assignments, exams, and tests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeacherAssessment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createTeacherAssessment
+      summary: Create a draft assignment, exam, or test for an assigned section
+      x-required-permission: teacher.assessments.manage
+      x-tenant-scope: authenticated active school and active teacher assignment
+      parameters:
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTeacherAssessment"
+      responses:
+        "201":
+          description: Draft created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherAssessment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /teacher/assessments/{id}/publish:
+    post:
+      operationId: publishTeacherAssessment
+      summary: Publish an assessment draft in an irreversible transition
+      x-required-permission: teacher.assessments.manage
+      x-tenant-scope: authenticated active school and active teacher assignment
+      parameters:
+        - $ref: "#/components/parameters/AssessmentId"
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "201":
+          description: Published assessment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherAssessment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /teacher/assessments/{id}/results:
+    get:
+      operationId: getTeacherAssessmentResults
+      summary: Read active enrolled students and result publication state for a published assessment
+      x-required-permission: teacher.results.read
+      x-tenant-scope: authenticated active school, teacher-created assessment, and active teacher assignment
+      parameters:
+        - $ref: "#/components/parameters/AssessmentId"
+      responses:
+        "200":
+          description: Assessment metadata, grade-scale status, and date-specific roster/results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherAssessmentResults"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    put:
+      operationId: saveTeacherAssessmentResults
+      summary: Create or update draft scores for active students enrolled on the assessment date
+      x-required-permission: teacher.results.write
+      x-tenant-scope: authenticated active school, teacher-created assessment, and active teacher assignment
+      parameters:
+        - $ref: "#/components/parameters/AssessmentId"
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveTeacherResults"
+      responses:
+        "200":
+          description: Number of draft scores saved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assessmentId, savedCount]
+                properties:
+                  assessmentId:
+                    type: string
+                    format: uuid
+                  savedCount:
+                    type: integer
+                    minimum: 1
+  /teacher/attendance/submit:
+    post:
+      operationId: submitTeacherAttendance
+      summary: Submit today's partial attendance register
+      x-required-permission: teacher.attendance.mark
+      x-tenant-scope: authenticated active school, current active year, and active teacher assignment
+      parameters:
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitTeacherAttendance"
+      responses:
+        "200":
+          description: Submitted attendance register
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceDraft"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /teacher/assessments/{id}/results/publish:
+    post:
+      operationId: publishTeacherAssessmentResults
+      summary: Publish saved partial results for a published assessment
+      x-required-permission: teacher.results.write
+      x-tenant-scope: authenticated active school, teacher-created assessment, and active teacher assignment
+      parameters:
+        - $ref: "#/components/parameters/AssessmentId"
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Published results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assessmentId, resultsStatus, publishedCount]
+                properties:
+                  assessmentId:
+                    type: string
+                    format: uuid
+                  resultsStatus:
+                    type: string
+                    const: PUBLISHED
+                  publishedCount:
+                    type: integer
+                    minimum: 1
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+components:
+  securitySchemes:
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: dashify_access
+  parameters:
+    AcademicYearIdQuery:
+      name: academicYearId
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    AssessmentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OriginHeader:
+      name: Origin
+      in: header
+      required: true
+      schema:
+        type: string
+    CsrfHeader:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+  schemas:
+    TeacherAcademicYear:
+      type: object
+      required: [id, name, startDate, endDate, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, ARCHIVED]
+    TeacherSections:
+      type: object
+      required: [academicYear, sections]
+      properties:
+        academicYear:
+          type: object
+          required: [id, name, status]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            status:
+              type: string
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeacherSection"
+    TeacherSection:
+      type: object
+      required: [id, name, classId, className, subject, isClassTeacher, classTeacherName, studentCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        classId:
+          type: string
+          format: uuid
+        className:
+          type: string
+        subject:
+          type: [string, "null"]
+        isClassTeacher:
+          type: boolean
+        classTeacherName:
+          type: [string, "null"]
+        studentCount:
+          type: integer
+          minimum: 0
+    TeacherAttendance:
+      type: object
+      required: [academicYear, section, date, status, canEdit, students]
+      properties:
+        academicYear:
+          type: object
+          required: [id, name, status]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            status:
+              type: string
+        section:
+          type: object
+          required: [id, name, classId, className]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            classId:
+              type: string
+              format: uuid
+            className:
+              type: string
+        date:
+          type: string
+          format: date
+        status:
+          type: [string, "null"]
+          enum: [DRAFT, SUBMITTED, OPEN, CLOSED, null]
+          description: Null means no session exists. The submitting Teacher can update their submitted register for the current school-local date.
+        canEdit:
+          type: boolean
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeacherAttendanceStudent"
+    TeacherAttendanceStudent:
+      type: object
+      required: [studentId, rollNumber, name, status, remarks]
+      properties:
+        studentId:
+          type: string
+          format: uuid
+        rollNumber:
+          type: [string, "null"]
+        name:
+          type: string
+        status:
+          type: [string, "null"]
+          enum: [PRESENT, ABSENT, LATE, EXCUSED, null]
+        remarks:
+          type: [string, "null"]
+          maxLength: 500
+    SaveTeacherAttendanceDraft:
+      type: object
+      additionalProperties: false
+      required: [academicYearId, sectionId, date, records]
+      properties:
+        academicYearId:
+          type: string
+          format: uuid
+        sectionId:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        records:
+          type: array
+          minItems: 1
+          description: Partial roster allowed; each supplied student must be unique and actively enrolled.
+          items:
+            type: object
+            additionalProperties: false
+            required: [studentId, status]
+            properties:
+              studentId:
+                type: string
+                format: uuid
+              status:
+                type: string
+                enum: [PRESENT, ABSENT, LATE, EXCUSED]
+              remarks:
+                type: string
+                maxLength: 500
+    SubmitTeacherAttendance:
+      type: object
+      additionalProperties: false
+      required: [academicYearId, sectionId, date]
+      properties:
+        academicYearId:
+          type: string
+          format: uuid
+        sectionId:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+    AttendanceDraft:
+      type: object
+      required: [sessionId, sectionId, date, recordCount, status]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        sectionId:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        recordCount:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [DRAFT, SUBMITTED]
+          description: Submitted registers are editable only by their creator on the current school-local date; no family-read route is available.
+    CreateTeacherAssessment:
+      type: object
+      additionalProperties: false
+      required: [academicYearId, sectionId, type, title, dueDate, maxScore, passMark]
+      properties:
+        academicYearId:
+          type: string
+          format: uuid
+        sectionId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ASSIGNMENT, EXAM, TEST]
+        title:
+          type: string
+          minLength: 1
+          maxLength: 150
+          pattern: '\S'
+        description:
+          type: string
+          maxLength: 5000
+        dueDate:
+          type: string
+          format: date
+          description: Must be within the selected academic year.
+        maxScore:
+          type: integer
+          minimum: 1
+        passMark:
+          type: integer
+          minimum: 0
+          description: Must not exceed maxScore.
+        startTime:
+          type: string
+          pattern: "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+          description: Required only for TEST; school-local time in HH:mm format.
+        durationMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+          description: Required only for TEST.
+      allOf:
+        - if:
+            properties:
+              type:
+                const: TEST
+          then:
+            required: [startTime, durationMinutes]
+    TeacherAssessment:
+      type: object
+      required:
+        [
+          id,
+          sectionId,
+          academicYearId,
+          type,
+          status,
+          title,
+          description,
+          dueDate,
+          startTime,
+          durationMinutes,
+          maxScore,
+          passMark,
+          publishedAt,
+          resultsStatus,
+          className,
+          sectionName,
+          resultCount,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sectionId:
+          type: string
+          format: uuid
+        academicYearId:
+          type: [string, "null"]
+          format: uuid
+        type:
+          type: string
+          enum: [ASSIGNMENT, EXAM, TEST]
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED]
+        title:
+          type: string
+        description:
+          type: [string, "null"]
+        dueDate:
+          type: string
+          format: date
+        startTime:
+          type: [string, "null"]
+          pattern: "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+        durationMinutes:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 1440
+        maxScore:
+          type: integer
+        passMark:
+          type: [integer, "null"]
+          minimum: 0
+        publishedAt:
+          type: [string, "null"]
+          format: date-time
+        resultsStatus:
+          type: string
+          enum: [DRAFT, PUBLISHED]
+          description: Results can be partially published and remain editable in the active academic year.
+        className:
+          type: string
+        sectionName:
+          type: string
+        resultCount:
+          type: integer
+          minimum: 0
+    TeacherAssessmentResults:
+      type: object
+      required: [assessment, students]
+      properties:
+        assessment:
+          type: object
+          required:
+            [
+              id,
+              title,
+              type,
+              dueDate,
+              startTime,
+              durationMinutes,
+              maxScore,
+              passMark,
+              academicYearId,
+              academicYearName,
+              resultsStatus,
+              resultsPublishedAt,
+              gradesConfigured,
+              className,
+              sectionName,
+            ]
+          properties:
+            id:
+              type: string
+              format: uuid
+            title:
+              type: string
+            type:
+              type: string
+              enum: [ASSIGNMENT, EXAM, TEST]
+            dueDate:
+              type: string
+              format: date
+            startTime:
+              type: [string, "null"]
+            durationMinutes:
+              type: [integer, "null"]
+            maxScore:
+              type: integer
+            passMark:
+              type: [integer, "null"]
+            academicYearId:
+              type: string
+              format: uuid
+            academicYearName:
+              type: string
+            resultsStatus:
+              type: string
+              enum: [DRAFT, PUBLISHED]
+            resultsPublishedAt:
+              type: [string, "null"]
+              format: date-time
+            gradesConfigured:
+              type: boolean
+            className:
+              type: string
+            sectionName:
+              type: string
+        students:
+          type: array
+          items:
+            type: object
+            required: [studentId, rollNumber, name, score, feedback, updatedAt, passed, grade]
+            properties:
+              studentId:
+                type: string
+                format: uuid
+              rollNumber:
+                type: [string, "null"]
+              name:
+                type: string
+              score:
+                type: [integer, "null"]
+              feedback:
+                type: [string, "null"]
+                maxLength: 2000
+              updatedAt:
+                type: [string, "null"]
+                format: date-time
+              passed:
+                type: [boolean, "null"]
+              grade:
+                type: [string, "null"]
+    SaveTeacherResults:
+      type: object
+      additionalProperties: false
+      required: [records]
+      properties:
+        records:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [studentId, score]
+            properties:
+              studentId:
+                type: string
+                format: uuid
+              score:
+                type: integer
+                minimum: 0
+                description: Must not exceed the assessment's maximum score; records may be edited after publication while the year is active.
+              feedback:
+                type: string
+                maxLength: 2000
+  responses:
+    BadRequest:
+      description: Invalid input, out-of-roster student, or score outside the allowed range
+    Unauthorized:
+      description: Authentication required
+    Forbidden:
+      description: Missing Teacher permission or invalid active-school context
+    NotFound:
+      description: The requested resource is not available in the active school or assignment
+    Conflict:
+      description: Resource is not in the required draft/publication state or a concurrent transition occurred

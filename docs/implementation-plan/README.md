@@ -23,6 +23,7 @@ The monorepo uses these links as the source of truth for coordinated feature wor
 | [Platform settings OpenAPI contract](../api-contracts/platform-settings.openapi.yaml) | Read-only enforced token lifetimes with separately authorized access |
 | [Platform support OpenAPI contract](../api-contracts/platform-support.openapi.yaml) | Platform-only internal tickets, permission-gated actions and history |
 | [Dashboard OpenAPI contract](../api-contracts/dashboard.openapi.yaml) | School-administrator counts, Principal daily attendance snapshot, and Teacher assigned-class attendance; other roles and trend metrics remain out of scope |
+| [Teacher workspace OpenAPI contract](../api-contracts/teacher-workspace.openapi.yaml) | Assignment-scoped Teacher sections, attendance, assessments, results, and immutable publish workflow |
 | [Attendance report OpenAPI contract](../api-contracts/attendance-report.openapi.yaml) | Approved school-administrator aggregate report for closed sessions; no exports or student-level detail |
 | [Access and workspace spec](./03-access-and-workspace-spec.md) | Frontend role policy and its relationship to backend permissions |
 | [Core integration slices](./04-core-integration-slices.md) | Student, academic structure, and attendance vertical slices |

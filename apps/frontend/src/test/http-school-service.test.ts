@@ -384,6 +384,7 @@ describe("HttpSchoolService.getClassrooms", () => {
             schoolId: "44009a3e-5693-4f11-9891-b5e34f4d02c6",
             schoolName: "Northstar School",
             localDate: "2026-04-03",
+            academicYearName: "2025-26",
             assignments: [
               {
                 classId: "22222222-2222-4222-8222-222222222222",
@@ -391,7 +392,10 @@ describe("HttpSchoolService.getClassrooms", () => {
                 sectionId: "034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
                 sectionName: "Section A",
                 subject: "Mathematics",
-                sessionStatus: "OPEN",
+                isClassTeacher: true,
+                classTeacherName: "Teacher One",
+                studentCount: 12,
+                sessionStatus: "DRAFT",
                 unmarkedCount: 3,
               },
               {
@@ -400,6 +404,9 @@ describe("HttpSchoolService.getClassrooms", () => {
                 sectionId: "044b0bc2-cdc2-43cf-bf2a-b10ad7583858",
                 sectionName: "Section B",
                 subject: null,
+                isClassTeacher: false,
+                classTeacherName: null,
+                studentCount: 0,
                 sessionStatus: null,
                 unmarkedCount: null,
               },
@@ -420,6 +427,9 @@ describe("HttpSchoolService.getClassrooms", () => {
         schoolId: "44009a3e-5693-4f11-9891-b5e34f4d02c6",
         schoolName: "Northstar School",
         localDate: "2026-04-03",
+        academicYearId: null,
+        academicYearName: "2025-26",
+        academicYearStatus: null,
         assignments: [
           {
             id: "22222222-2222-4222-8222-222222222222-034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
@@ -428,7 +438,10 @@ describe("HttpSchoolService.getClassrooms", () => {
             sectionId: "034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
             sectionName: "Section A",
             subject: "Mathematics",
-            sessionStatus: "OPEN",
+            isClassTeacher: true,
+            classTeacherName: "Teacher One",
+            studentCount: 12,
+            sessionStatus: "DRAFT",
             unmarkedCount: 3,
           },
           {
@@ -438,6 +451,9 @@ describe("HttpSchoolService.getClassrooms", () => {
             sectionId: "044b0bc2-cdc2-43cf-bf2a-b10ad7583858",
             sectionName: "Section B",
             subject: null,
+            isClassTeacher: false,
+            classTeacherName: null,
+            studentCount: 0,
             sessionStatus: null,
             unmarkedCount: null,
           },
@@ -456,6 +472,7 @@ describe("HttpSchoolService.getClassrooms", () => {
             schoolId: "44009a3e-5693-4f11-9891-b5e34f4d02c6",
             schoolName: "Northstar School",
             localDate: "2026-04-03",
+            academicYearName: null,
             assignments: [
               {
                 classId: "22222222-2222-4222-8222-222222222222",
@@ -463,6 +480,9 @@ describe("HttpSchoolService.getClassrooms", () => {
                 sectionId: "034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
                 sectionName: "Section A",
                 subject: null,
+                isClassTeacher: false,
+                classTeacherName: null,
+                studentCount: 4,
                 sessionStatus: null,
                 unmarkedCount: 0,
               },
@@ -482,6 +502,46 @@ describe("HttpSchoolService.getClassrooms", () => {
       await expect(service.getTeacherDashboard()).rejects.toBeInstanceOf(
         ApiError,
       );
+    });
+
+    it("keeps a legacy dashboard response usable without optional display aggregates", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              schoolId: "44009a3e-5693-4f11-9891-b5e34f4d02c6",
+              schoolName: "Northstar School",
+              localDate: "2026-04-03",
+              assignments: [
+                {
+                  classId: "22222222-2222-4222-8222-222222222222",
+                  className: "Grade 8",
+                  sectionId: "034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
+                  sectionName: "Section A",
+                  subject: "Mathematics",
+                  isClassTeacher: false,
+                  classTeacherName: null,
+                  sessionStatus: null,
+                  unmarkedCount: null,
+                },
+              ],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+      const service = new HttpSchoolService(
+        new ApiClient("https://dashify.test/api/v1"),
+      );
+
+      await expect(service.getTeacherDashboard()).resolves.toMatchObject({
+        academicYearName: null,
+        assignments: [{ studentCount: null }],
+      });
     });
   });
 

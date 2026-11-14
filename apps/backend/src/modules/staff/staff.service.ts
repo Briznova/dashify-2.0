@@ -97,7 +97,17 @@ export class StaffService {
           });
           if (!department) throw new NotFoundException("Active department not found");
         }
-        const permissions = ["dashboard.teacher.read", "announcements.read"];
+        const permissions = [
+          "dashboard.teacher.read",
+          "announcements.read",
+          "teacher.classes.read",
+          "teacher.attendance.read",
+          "teacher.attendance.mark",
+          "teacher.assessments.read",
+          "teacher.assessments.manage",
+          "teacher.results.read",
+          "teacher.results.write",
+        ];
         let role = await tx.role.findUnique({
           where: { schoolId_key: { schoolId, key: "TEACHER" } },
           include: { permissions: { include: { permission: { select: { key: true } } } } },
@@ -576,65 +586,121 @@ export class StaffService {
     });
   }
 
-  async assignTeacher(schoolId: string, dto: AssignTeacherDto) {
-    return this.prisma.withTenant(schoolId, async (tx) => {
-      const staff = await tx.staffProfile.findFirst({
-        where: { id: dto.staffId, schoolId, isActive: true },
-      });
-      if (!staff) throw new NotFoundException("Staff member not found");
-
-      const schoolClass = await tx.schoolClass.findFirst({
-        where: { id: dto.classId, schoolId, isActive: true },
-      });
-      if (!schoolClass) throw new NotFoundException("Class not found");
-
-      if (dto.sectionId) {
-        const section = await tx.section.findFirst({
-          where: {
-            id: dto.sectionId,
-            schoolId,
-            classId: dto.classId,
-            isActive: true,
-          },
+  async assignTeacher(
+    schoolId: string,
+    actorId: string,
+    dto: AssignTeacherDto,
+  ) {
+    if (dto.isClassTeacher && !dto.sectionId) {
+      throw new BadRequestException(
+        "A class-teacher designation requires a specific section",
+      );
+    }
+    try {
+      return await this.prisma.withTenant(schoolId, async (tx) => {
+        const staff = await tx.staffProfile.findFirst({
+          where: { id: dto.staffId, schoolId, isActive: true },
         });
-        if (!section) {
-          throw new NotFoundException(
-            "Section not found in the selected class",
-          );
+        if (!staff) throw new NotFoundException("Staff member not found");
+
+        const schoolClass = await tx.schoolClass.findFirst({
+          where: { id: dto.classId, schoolId, isActive: true },
+        });
+        if (!schoolClass) throw new NotFoundException("Class not found");
+
+        if (dto.sectionId) {
+          const section = await tx.section.findFirst({
+            where: {
+              id: dto.sectionId,
+              schoolId,
+              classId: dto.classId,
+              isActive: true,
+            },
+          });
+          if (!section) {
+            throw new NotFoundException(
+              "Section not found in the selected class",
+            );
+          }
         }
-      }
 
-      const assignment = await tx.teacherAssignment.findFirst({
-        where: {
-          schoolId,
-          staffId: dto.staffId,
-          classId: dto.classId,
-          sectionId: dto.sectionId ?? null,
-        },
-      });
-
-      if (assignment) {
-        return tx.teacherAssignment.update({
-          where: { id: assignment.id },
-          data: {
-            subject: dto.subject ?? assignment.subject,
-            isActive: true,
+        const assignment = await tx.teacherAssignment.findFirst({
+          where: {
+            schoolId,
+            staffId: dto.staffId,
+            classId: dto.classId,
+            sectionId: dto.sectionId ?? null,
           },
-          include: { staff: true, class: true, section: true },
         });
-      }
+        const isClassTeacher =
+          dto.isClassTeacher ?? assignment?.isClassTeacher ?? false;
+        if (isClassTeacher) {
+          const existingDesignation = await tx.teacherAssignment.findFirst({
+            where: {
+              schoolId,
+              classId: dto.classId,
+              sectionId: dto.sectionId,
+              isActive: true,
+              isClassTeacher: true,
+              ...(assignment ? { id: { not: assignment.id } } : {}),
+            },
+            select: { id: true },
+          });
+          if (existingDesignation) {
+            throw new ConflictException(
+              "This section already has a designated class teacher",
+            );
+          }
+        }
 
-      return tx.teacherAssignment.create({
-        data: {
-          schoolId,
-          staffId: dto.staffId,
-          classId: dto.classId,
-          sectionId: dto.sectionId,
-          subject: dto.subject,
-          isActive: true,
-        },
-        include: { staff: true, class: true, section: true },
+        const saved = assignment
+          ? await tx.teacherAssignment.update({
+              where: { id: assignment.id },
+              data: {
+                subject: dto.subject ?? assignment.subject,
+                isClassTeacher,
+                isActive: true,
+              },
+              include: { staff: true, class: true, section: true },
+            })
+          : await tx.teacherAssignment.create({
+              data: {
+                schoolId,
+                staffId: dto.staffId,
+                classId: dto.classId,
+                sectionId: dto.sectionId,
+                subject: dto.subject,
+                isClassTeacher,
+                isActive: true,
+              },
+              include: { staff: true, class: true, section: true },
+            });
+        await tx.auditLog.create({
+          data: {
+            schoolId,
+            actorUserId: actorId,
+            action: "TEACHER_ASSIGNMENT_SAVED",
+            resource: "teacher_assignment",
+            resourceId: saved.id,
+            summary: {
+              classId: dto.classId,
+              sectionId: dto.sectionId ?? null,
+              isClassTeacher,
+            },
+          },
+        });
+        return saved;
       });
-    });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new ConflictException(
+          "A class teacher is already designated for this section",
+        );
+      }
+      throw error;
+    }
   }
 }

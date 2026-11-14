@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useAnnouncementActions, useAnnouncements } from "@/hooks/use-school-data";
+import {
+  useAnnouncementActions,
+  useAnnouncements,
+} from "@/hooks/use-school-data";
 import { useAuthSession } from "@/hooks/use-auth";
 import { isApiMode } from "@/services";
 import { PageHeading } from "@/components/ui/page-heading";
@@ -13,7 +16,8 @@ export function AnnouncementsDirectory() {
   const { session, isLoading: isSessionLoading } = useAuthSession();
   const canManage = isApiMode
     ? session?.permissionKeys.includes("announcements.manage") === true
-    : session?.user.role === "school_admin";
+    : session?.user?.role === "school_admin";
+  const isTeacher = session?.user?.role === "teacher";
   const resource = useAnnouncements(canManage);
   const actions = useAnnouncementActions();
   const [title, setTitle] = useState("");
@@ -34,11 +38,15 @@ export function AnnouncementsDirectory() {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${isTeacher ? styles.teacherPage : ""}`}>
       <PageHeading
-        eyebrow="SCHOOL WORKSPACE"
-        title="Announcements"
-        description="Read published updates from your school."
+        eyebrow={isTeacher ? "TEACHING / SCHOOL NOTICES" : "SCHOOL WORKSPACE"}
+        title={isTeacher ? "School notices" : "Announcements"}
+        description={
+          isTeacher
+            ? "Published school-wide announcements from your School Admin."
+            : "Read published updates from your school."
+        }
       />
 
       {canManage && (
@@ -76,11 +84,17 @@ export function AnnouncementsDirectory() {
       )}
 
       <Panel
-        title={canManage ? "School announcements" : "Published announcements"}
+        title={isTeacher
+          ? "School notices"
+          : canManage
+            ? "School announcements"
+            : "Published announcements"}
         description={canManage
           ? "Review drafts and published messages for this school."
-          : "Updates published for your school."}
-        className={styles.panel}
+            : isTeacher
+              ? "Announcements published for the whole school."
+              : "Updates published for your school."}
+          className={`${styles.panel} ${isTeacher ? styles.teacherPanel : ""} ${isTeacher ? styles.teacherPublishedPanel : ""} ${isTeacher ? styles.teacherPublishedWide : ""}`}
       >
         {(resource.error || resource.isLoading || (isApiMode && isSessionLoading)) && (
           <ResourceState
@@ -93,9 +107,12 @@ export function AnnouncementsDirectory() {
           <p className={styles.empty}>There are no announcements yet.</p>
         )}
         {resource.data && resource.data.length > 0 && (
-          <div className={styles.list}>
+          <div className={`${styles.list} ${isTeacher ? styles.teacherList : ""}`}>
             {resource.data.map((announcement) => (
-              <article className={styles.item} key={announcement.id}>
+              <article
+                className={`${styles.item} ${isTeacher ? styles.teacherItem : ""}`}
+                key={announcement.id}
+              >
                 <div className={styles.itemHeader}>
                   <h3>{announcement.title}</h3>
                   {canManage && (

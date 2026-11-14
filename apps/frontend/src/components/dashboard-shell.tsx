@@ -15,6 +15,11 @@ import {
 import { getDashboardRoute } from "@/lib/dashboard-route";
 import { isPlatformPage, platformPages } from "@/lib/platform-pages";
 import { authService, isApiMode } from "@/services";
+import {
+  useNotifications,
+  useTeacherActions,
+  useTeacherDashboard,
+} from "@/hooks/use-school-data";
 import type { UserRole } from "@/types/auth";
 import { Icon } from "./ui/icon";
 
@@ -184,20 +189,7 @@ const notificationsByRole: Record<
       action: "Open reports",
     },
   ],
-  teacher: [
-    {
-      title: "Assignments to grade",
-      detail: "18 submissions are waiting for review.",
-      href: "/dashboard/academics",
-      action: "Review work",
-    },
-    {
-      title: "Class register incomplete",
-      detail: "Grade 7 · Section B attendance is not complete.",
-      href: "/dashboard/attendance",
-      action: "Complete register",
-    },
-  ],
+  teacher: [],
   accountant: [
     {
       title: "Receipts to reconcile",
@@ -242,6 +234,44 @@ const notificationsByRole: Record<
   ],
 };
 
+function TeacherHeaderMeta() {
+  const dashboard = useTeacherDashboard();
+  const data = dashboard.data;
+
+  if (dashboard.error) {
+    return (
+      <div className={styles.teacherCalendarError} role="alert">
+        <span>School calendar unavailable.</span>
+        <button type="button" onClick={dashboard.refresh}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const localDate = new Date(`${data.localDate}T12:00:00Z`);
+  const dateLabel = new Intl.DateTimeFormat("en", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(localDate);
+
+  return (
+    <div className={styles.teacherCalendar} aria-label="School calendar">
+      {data.academicYearName && (
+        <span className={styles.schoolYear}>AY {data.academicYearName}</span>
+      )}
+      {!data.academicYearName && (
+        <span className={styles.schoolYear}>Academic year unavailable</span>
+      )}
+      <time dateTime={data.localDate}>{dateLabel}</time>
+    </div>
+  );
+}
+
 export function DashboardShell({
   children,
 }: Readonly<{ children: ReactNode }>) {
@@ -262,6 +292,10 @@ export function DashboardShell({
     refresh,
   } = useAuthSession();
   const userRole = session?.user.role;
+  const teacherNotifications = useNotifications(
+    isApiMode && userRole === "teacher",
+  );
+  const notificationActions = useTeacherActions();
   const rolePolicy = getRolePolicy(userRole);
   const permissionKeys = isApiMode ? session?.permissionKeys : undefined;
   const navigation: readonly WorkspaceNavigationItem[] = getRoleNavigation(
@@ -392,7 +426,7 @@ export function DashboardShell({
     .toUpperCase();
 
   return (
-    <div className={styles.app}>
+    <div className={`${styles.app} ${role === "teacher" ? styles.teacherApp : ""}`}>
       {sidebarOpen && (
         <button
           className={styles.backdrop}
@@ -416,7 +450,11 @@ export function DashboardShell({
           </span>
           <span className={styles.workspaceText}>
             <strong>{role === "super_admin" ? "Platform administration" : (user.schoolName ?? "All schools")}</strong>
-            <small>{role.replaceAll("_", " ")}</small>
+            <small>
+              {role === "teacher"
+                ? formatRole(role)
+                : role.replaceAll("_", " ")}
+            </small>
           </span>
           {role !== "super_admin" && <span className={styles.workspaceChevron}>
             <Icon name="chevronDown" size={16} />
@@ -473,16 +511,23 @@ export function DashboardShell({
           </>
         )}
         <div className={styles.sidebarSpacer} />
-        <div className={styles.helpCard}>
-          <span className={styles.helpIcon}>
-            <Icon name="sparkles" size={17} />
-          </span>
-          <strong>Need a hand?</strong>
-          <p>Visit our help center to get the most out of Dashify.</p>
-          <a href="mailto:hello@dashify.app">
-            Visit help center <Icon name="arrowUpRight" size={14} />
+        {role === "teacher" ? (
+          <a className={styles.helpLink} href="mailto:hello@dashify.app">
+            <Icon name="info" size={16} />
+            Help &amp; support
           </a>
-        </div>
+        ) : (
+          <div className={styles.helpCard}>
+            <span className={styles.helpIcon}>
+              <Icon name="sparkles" size={17} />
+            </span>
+            <strong>Need a hand?</strong>
+            <p>Visit our help center to get the most out of Dashify.</p>
+            <a href="mailto:hello@dashify.app">
+              Visit help center <Icon name="arrowUpRight" size={14} />
+            </a>
+          </div>
+        )}
         <div className={styles.profileWrap}>
           <button
             className={styles.profileButton}
@@ -569,16 +614,152 @@ export function DashboardShell({
             <Icon name="menu" size={19} />
           </button>
           <div className={styles.breadcrumb}>
-            <span>
+            <span className={styles.notificationContent}>
               {role === "super_admin"
                 ? "Dashify"
                 : (user.schoolName ?? "School workspace")}
             </span>
-            <span aria-hidden="true">/</span>
-            <strong>{breadcrumbLabel}</strong>
+            {role === "teacher" ? (
+              <span className={styles.roleBadge}>Teacher</span>
+            ) : (
+              <>
+                <span aria-hidden="true">/</span>
+                <strong>{breadcrumbLabel}</strong>
+              </>
+            )}
           </div>
           <div className={styles.topbarActions}>
-            {!isApiMode && role !== "super_admin" && (
+            {role === "teacher" && <TeacherHeaderMeta />}
+            {role === "teacher" && isApiMode ? (
+              <div className={styles.notificationWrap}>
+                <button
+                  className={styles.iconButton}
+                  type="button"
+                  aria-label={`Notifications${teacherNotifications.data?.unreadCount ? `, ${teacherNotifications.data.unreadCount} unread` : ""}`}
+                  aria-expanded={notificationsOpen}
+                  aria-controls="dashboard-notifications"
+                  onClick={() => {
+                    const opening = !notificationsOpen;
+                    setNotificationsOpen(opening);
+                    if (opening) teacherNotifications.refresh();
+                  }}
+                >
+                  <Icon name="bell" size={19} />
+                  {(teacherNotifications.data?.unreadCount ?? 0) > 0 && <i />}
+                </button>
+                {notificationsOpen && (
+                  <div
+                    className={styles.notificationPanel}
+                    id="dashboard-notifications"
+                    role="region"
+                    aria-label="Notifications"
+                  >
+                    <div className={styles.notificationHeader}>
+                      <div>
+                        <strong>Notifications</strong>
+                        <span>
+                          {teacherNotifications.data?.unreadCount
+                            ? `${teacherNotifications.data.unreadCount} unread`
+                            : "You’re all caught up"}
+                        </span>
+                      </div>
+                      {(teacherNotifications.data?.unreadCount ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          disabled={notificationActions.isPending}
+                          onClick={async () => {
+                            if (
+                              await notificationActions.markAllNotificationsRead()
+                            ) {
+                              teacherNotifications.refresh();
+                            }
+                          }}
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+                    {teacherNotifications.error && (
+                      <div className={styles.notificationsEmpty} role="alert">
+                        <span>{teacherNotifications.error}</span>
+                        <button
+                          type="button"
+                          onClick={teacherNotifications.refresh}
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
+                    {notificationActions.error && (
+                      <p className={styles.signOutError} role="alert">
+                        {notificationActions.error}
+                      </p>
+                    )}
+                    {teacherNotifications.isLoading ? (
+                      <p className={styles.notificationsEmpty} role="status">
+                        Loading notifications…
+                      </p>
+                    ) : teacherNotifications.data?.notifications.length ? (
+                      teacherNotifications.data.notifications.map((item) => (
+                        <article
+                          className={`${styles.notificationItem} ${item.readAt ? styles.notificationRead : ""}`}
+                          key={item.id}
+                        >
+                          <span
+                            className={styles.notificationDot}
+                            aria-hidden="true"
+                          />
+                          <span>
+                            <strong>{item.title}</strong>
+                            <small>{item.body}</small>
+                            <em>
+                              {new Intl.DateTimeFormat("en", {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                              }).format(new Date(item.createdAt))}
+                            </em>
+                          </span>
+                          {!item.readAt && (
+                            <button
+                              className={styles.notificationMarkRead}
+                              type="button"
+                              disabled={notificationActions.isPending}
+                              onClick={async () => {
+                                if (
+                                  await notificationActions.markNotificationRead(
+                                    item.id,
+                                  )
+                                ) {
+                                  teacherNotifications.refresh();
+                                }
+                              }}
+                            >
+                              Mark read
+                            </button>
+                          )}
+                        </article>
+                      ))
+                    ) : (
+                      !teacherNotifications.error && (
+                        <p className={styles.notificationsEmpty}>
+                          No school notifications yet.
+                        </p>
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : role === "teacher" ? (
+              <button
+                className={`${styles.iconButton} ${styles.disabledIconButton}`}
+                type="button"
+                aria-label="Notifications require a school connection"
+                title="Notifications require a school connection"
+                disabled
+              >
+                <Icon name="bell" size={19} />
+              </button>
+            ) : !isApiMode && role !== "super_admin" ? (
               <div className={styles.notificationWrap}>
                 <button
                   className={styles.iconButton}
@@ -651,7 +832,7 @@ export function DashboardShell({
                   </div>
                 )}
               </div>
-            )}
+            ) : null}
             <button
               className={styles.topAvatar}
               aria-label={`Open ${user.name} profile`}

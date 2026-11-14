@@ -43,7 +43,7 @@ permissions.
 | Super Admin | `/dashboard` | Overview, Schools, Students, Staff, Classes, Attendance, Fees, Academics, Analytics, Reports |
 | School Admin | `/dashboard` | Overview, Students, Staff, Classes, Attendance, Fees, Academics, Analytics, Reports |
 | Principal | `/dashboard` | Overview, Students, Staff, Classes, Attendance, Fees, Academics, Analytics, Reports |
-| Teacher | `/dashboard/teacher` | Overview, My teaching day, Classes, Attendance, Academics |
+| Teacher | `/dashboard/teacher` | Home, Attendance, Results, Assignments / Exam, School notices |
 | Accountant | `/dashboard/accountant` | Overview, Finance overview, Fees, Reports |
 | Parent | `/dashboard/parent` | Overview, My child |
 | Student | `/dashboard/student` | Overview, My learning, Academics |

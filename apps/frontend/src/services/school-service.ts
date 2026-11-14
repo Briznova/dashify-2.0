@@ -37,6 +37,20 @@ import type {
   StudentAdmissionInput,
   SchoolProfile,
   TeacherDashboard,
+  TeacherSection,
+  TeacherAttendance,
+  TeacherAssessment,
+  TeacherAssessmentResults,
+  TeacherAssessmentType,
+  TeacherAcademicYear,
+  TeacherSections,
+  TeacherGradeBand,
+  TeacherGradeScale,
+  TeacherNotifications,
+  TeacherAttendanceSessionStatus,
+  TeacherAttendanceStatus,
+  TeacherAssignment,
+  AssignTeacherInput,
   UpdateStaffInput,
   UpdateSchoolProfileInput,
   UpdateClassroomInput,
@@ -46,7 +60,64 @@ import type {
 
 export interface SchoolService {
   getOverview(role: SchoolRole, signal?: AbortSignal): Promise<SchoolOverview>;
-  getTeacherDashboard(signal?: AbortSignal): Promise<TeacherDashboard>;
+  getTeacherAcademicYears(signal?: AbortSignal): Promise<TeacherAcademicYear[]>;
+  getTeacherDashboard(academicYearId?: string, signal?: AbortSignal): Promise<TeacherDashboard>;
+  getTeacherSections(academicYearId?: string, signal?: AbortSignal): Promise<TeacherSections>;
+  getTeacherAttendance(academicYearId: string, sectionId: string, date: string, signal?: AbortSignal): Promise<TeacherAttendance>;
+  saveTeacherAttendanceDraft(input: {
+    academicYearId: string;
+    sectionId: string;
+    date: string;
+    records: {
+      studentId: string;
+      status: TeacherAttendanceStatus;
+      remarks?: string;
+    }[];
+  }): Promise<{
+    sessionId: string;
+    sectionId: string;
+    date: string;
+    recordCount: number;
+    status: TeacherAttendanceSessionStatus;
+  }>;
+  submitTeacherAttendance(input: {
+    academicYearId: string;
+    sectionId: string;
+    date: string;
+  }): Promise<{ sessionId: string; sectionId: string; date: string; recordCount: number; status: TeacherAttendanceSessionStatus }>;
+  getTeacherAssessments(academicYearId?: string, sectionId?: string, signal?: AbortSignal): Promise<TeacherAssessment[]>;
+  createTeacherAssessment(input: {
+    academicYearId: string;
+    sectionId: string;
+    type: TeacherAssessmentType;
+    title: string;
+    description?: string;
+    dueDate: string;
+    startTime?: string;
+    durationMinutes?: number;
+    maxScore: number;
+    passMark: number;
+  }): Promise<TeacherAssessment>;
+  publishTeacherAssessment(id: string): Promise<TeacherAssessment>;
+  getTeacherResults(assessmentId: string, signal?: AbortSignal): Promise<TeacherAssessmentResults>;
+  saveTeacherResults(
+    assessmentId: string,
+    input: {
+      records: {
+        studentId: string;
+        score: number;
+        feedback?: string;
+      }[];
+    },
+  ): Promise<{ assessmentId: string; savedCount: number }>;
+  publishTeacherResults(assessmentId: string): Promise<{ assessmentId: string; resultsStatus: "PUBLISHED"; publishedCount: number }>;
+  getGradeScale(academicYearId: string, signal?: AbortSignal): Promise<TeacherGradeScale>;
+  saveGradeScale(academicYearId: string, bands: TeacherGradeBand[]): Promise<TeacherGradeScale>;
+  getNotifications(signal?: AbortSignal): Promise<TeacherNotifications>;
+  markNotificationRead(id: string): Promise<void>;
+  markAllNotificationsRead(): Promise<number>;
+  getTeacherAssignments(signal?: AbortSignal): Promise<TeacherAssignment[]>;
+  assignTeacher(input: AssignTeacherInput): Promise<TeacherAssignment>;
   getPortalOverview(role: PortalRole, signal?: AbortSignal): Promise<PortalOverview>;
   getStudents(page?: number, pageSize?: number, signal?: AbortSignal): Promise<StudentPage>;
   searchStudents(input: StudentDirectorySearch, signal?: AbortSignal): Promise<StudentPage>;

@@ -47,6 +47,23 @@ vi.mock("@/hooks/use-school-data", () => ({
     isPending: false,
     error: null,
   }),
+  useTeacherActions: () => ({
+    assignTeacher: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
+  useTeacherAssignments: () => ({
+    data: [],
+    isLoading: false,
+    error: null,
+    refresh: mocks.refresh,
+  }),
+  useClassrooms: () => ({
+    data: [],
+    isLoading: false,
+    error: null,
+    refresh: mocks.refresh,
+  }),
   useDepartments: () => ({
     data: [{ id: "department-a", name: "Synthetic Department", isActive: true }],
     isLoading: false, error: null, refresh: vi.fn(),

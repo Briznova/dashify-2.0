@@ -247,6 +247,20 @@
   font-weight: 600;
 }
 
+.helpLink {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 6px 12px;
+  color: #81899a;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.helpLink:hover {
+  color: #5368ea;
+}
+
 .profileButton {
   display: flex;
   width: 100%;
@@ -448,6 +462,15 @@
   white-space: nowrap;
 }
 
+.roleBadge {
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: #f0f3f8;
+  color: #7a8495;
+  font-size: 10px;
+  font-weight: 550;
+}
+
 .topbarActions {
   position: relative;
   display: flex;
@@ -551,6 +574,7 @@
 
 .notificationItem {
   display: flex;
+  align-items: flex-start;
   gap: 10px;
   padding: 13px 15px;
   border-bottom: 1px solid #f1f2f6;
@@ -569,8 +593,10 @@
   background: #6175ef;
 }
 
-.notificationItem > span:last-child {
+.notificationContent {
   display: grid;
+  min-width: 0;
+  flex: 1;
   gap: 5px;
 }
 
@@ -593,6 +619,26 @@
   font-weight: 600;
 }
 
+.notificationRead .notificationDot {
+  background: #d3d7e3;
+}
+
+.notificationMarkRead {
+  flex: 0 0 auto;
+  padding: 4px 0 4px 4px;
+  border: 0;
+  background: transparent;
+  color: #566df1;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notificationMarkRead:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
 .notificationsEmpty {
   margin: 0;
   padding: 18px 15px;
@@ -606,6 +652,70 @@
   height: 29px;
   border: 0;
   cursor: pointer;
+}
+
+.teacherApp .sidebar {
+  width: 224px;
+}
+
+.teacherApp .mainColumn {
+  margin-left: 224px;
+}
+
+.teacherApp .topbar {
+  padding-right: 28px;
+  padding-left: 28px;
+}
+
+.teacherApp .content {
+  width: min(100%, 1480px);
+  padding: 28px 30px 52px;
+}
+
+.teacherCalendar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #687286;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.schoolYear {
+  padding: 7px 10px;
+  border: 1px solid #e6e9f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #505b71;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.teacherCalendarError {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #a83232;
+  font-size: 11px;
+}
+
+.teacherCalendarError button {
+  padding: 4px 7px;
+  border: 1px solid #e4b7b7;
+  border-radius: 5px;
+  background: #fff;
+  color: #9c3434;
+  font: inherit;
+  cursor: pointer;
+}
+
+.disabledIconButton {
+  cursor: not-allowed;
+  opacity: .8;
+}
+
+.disabledIconButton:disabled {
+  color: #788294;
 }
 
 .content {
@@ -639,6 +749,23 @@
 }
 
 @media (max-width: 760px) {
+  .teacherApp .sidebar {
+    width: min(290px, calc(100vw - 48px));
+  }
+
+  .teacherApp .mainColumn {
+    margin-left: 0;
+  }
+
+  .teacherApp .topbar {
+    height: 64px;
+    padding: 0 14px;
+  }
+
+  .teacherApp .content {
+    padding: 25px 16px 40px;
+  }
+
   .sidebar {
     z-index: 40;
     width: min(290px, calc(100vw - 48px));
@@ -699,6 +826,21 @@
   .topbarActions {
     flex: 0 0 auto;
     gap: 10px;
+  }
+
+  .teacherCalendar {
+    gap: 8px;
+    font-size: 10px;
+  }
+
+  .schoolYear {
+    display: none;
+  }
+
+  .teacherCalendar time {
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .notificationPanel {

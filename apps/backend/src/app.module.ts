@@ -19,6 +19,8 @@ import { ReportsModule } from "./modules/reports/reports.module";
 import { AnnouncementsModule } from "./modules/announcements/announcements.module";
 import { PlatformModule } from "./modules/platform/platform.module";
 import { CsrfGuard } from "./common/guards/csrf.guard";
+import { TeacherWorkspaceModule } from "./modules/teacher-workspace/teacher-workspace.module";
+import { NotificationsModule } from "./modules/notifications/notifications.module";
 
 @Module({
   imports: [
@@ -87,6 +89,8 @@ import { CsrfGuard } from "./common/guards/csrf.guard";
     DashboardModule,
     ReportsModule,
     AnnouncementsModule,
+    TeacherWorkspaceModule,
+    NotificationsModule,
     PlatformModule,
     AuditModule,
   ],

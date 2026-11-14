@@ -3,6 +3,8 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  ParseUUIDPipe,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -92,13 +94,21 @@ export class DashboardController {
   @ApiNotFoundResponse({
     description: "The active school is missing or inactive",
   })
-  getTeacherDashboard(@Req() req: AuthenticatedRequest) {
+  getTeacherDashboard(
+    @Req() req: AuthenticatedRequest,
+    @Query("academicYearId", new ParseUUIDPipe({ optional: true }))
+    academicYearId?: string,
+  ) {
     if (req.user.activeWorkspaceRole?.toLowerCase() !== "teacher") {
       throw new ForbiddenException();
     }
     const schoolId = req.user.activeSchoolId;
     if (!schoolId)
       throw new BadRequestException("Select an active school first");
-    return this.dashboard.getTeacherDashboard(schoolId, req.user.id);
+    return this.dashboard.getTeacherDashboard(
+      schoolId,
+      req.user.id,
+      academicYearId,
+    );
   }
 }

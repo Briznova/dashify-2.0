@@ -66,8 +66,16 @@ export type TeacherDashboard = {
   schoolId: string;
   schoolName: string;
   localDate: string;
+  academicYearId: string | null;
+  academicYearName: string | null;
+  academicYearStatus: AcademicYear["status"] | null;
   assignments: TeacherDashboardAssignment[];
 };
+
+export type TeacherAcademicYear = Pick<
+  AcademicYear,
+  "id" | "name" | "startDate" | "endDate" | "status"
+>;
 
 export type TeacherDashboardAssignment = {
   id: string;
@@ -76,8 +84,134 @@ export type TeacherDashboardAssignment = {
   sectionId: string;
   sectionName: string;
   subject: string | null;
-  sessionStatus: "OPEN" | "CLOSED" | null;
+  studentCount: number | null;
+  isClassTeacher: boolean;
+  classTeacherName: string | null;
+  sessionStatus: "DRAFT" | "SUBMITTED" | "OPEN" | "CLOSED" | null;
   unmarkedCount: number | null;
+};
+
+export type TeacherSection = {
+  id: string;
+  name: string;
+  classId: string;
+  className: string;
+  subject: string | null;
+  isClassTeacher: boolean;
+  classTeacherName: string | null;
+  studentCount: number | null;
+};
+
+export type TeacherSections = {
+  academicYear: Pick<AcademicYear, "id" | "name" | "status"> | null;
+  sections: TeacherSection[];
+};
+
+export type TeacherAttendanceStatus =
+  AttendanceSessionRecord["status"];
+export type TeacherAttendanceSessionStatus =
+  | "DRAFT"
+  | "SUBMITTED"
+  | "OPEN"
+  | "CLOSED";
+
+export type TeacherAttendanceStudent = {
+  studentId: string;
+  rollNumber: string | null;
+  name: string;
+  status: TeacherAttendanceStatus | null;
+  remarks: string | null;
+};
+
+export type TeacherAttendance = {
+  academicYear: Pick<AcademicYear, "id" | "name" | "status">;
+  section: Pick<TeacherSection, "id" | "name" | "classId" | "className">;
+  date: string;
+  status: TeacherAttendanceSessionStatus | null;
+  canEdit: boolean;
+  students: TeacherAttendanceStudent[];
+};
+
+export type TeacherAssessmentType = "ASSIGNMENT" | "EXAM" | "TEST";
+export type TeacherAssessmentStatus = "DRAFT" | "PUBLISHED";
+
+export type TeacherAssessment = {
+  id: string;
+  sectionId: string;
+  type: TeacherAssessmentType;
+  status: TeacherAssessmentStatus;
+  title: string;
+  description: string | null;
+  dueDate: string;
+  startTime: string | null;
+  durationMinutes: number | null;
+  maxScore: number;
+  passMark: number | null;
+  academicYearId: string | null;
+  publishedAt: string | null;
+  resultsStatus: "DRAFT" | "PUBLISHED";
+  className: string;
+  sectionName: string;
+  resultCount: number;
+};
+
+export type TeacherAssessmentResults = {
+  assessment: Pick<
+    TeacherAssessment,
+    "id"
+    | "title"
+    | "type"
+    | "dueDate"
+    | "startTime"
+    | "durationMinutes"
+    | "maxScore"
+    | "passMark"
+    | "academicYearId"
+    | "resultsStatus"
+    | "className"
+    | "sectionName"
+  > & {
+    academicYearName: string;
+    resultsPublishedAt: string | null;
+    gradesConfigured: boolean;
+  };
+  students: {
+    studentId: string;
+    rollNumber: string | null;
+    name: string;
+    score: number | null;
+    feedback: string | null;
+    updatedAt: string | null;
+    passed: boolean | null;
+    grade: string | null;
+  }[];
+};
+
+export type TeacherGradeBand = {
+  id?: string;
+  label: string;
+  minPercent: number;
+  maxPercent: number;
+};
+
+export type TeacherGradeScale = {
+  academicYearId: string;
+  academicYearName: string;
+  bands: TeacherGradeBand[];
+};
+
+export type TeacherNotification = {
+  id: string;
+  type: "GENERAL" | "ATTENDANCE" | "FEE" | "ANNOUNCEMENT" | "SYSTEM";
+  title: string;
+  body: string;
+  readAt: string | null;
+  createdAt: string;
+};
+
+export type TeacherNotifications = {
+  notifications: TeacherNotification[];
+  unreadCount: number;
 };
 
 export type Student = {
@@ -267,6 +401,26 @@ export type StaffMember = {
   lastName?: string | null;
   phone?: string | null;
   departmentId?: string | null;
+};
+
+export type TeacherAssignment = {
+  id: string;
+  staffId: string;
+  classId: string;
+  sectionId: string | null;
+  subject: string | null;
+  isClassTeacher: boolean;
+  staffName: string;
+  className: string;
+  sectionName: string | null;
+};
+
+export type AssignTeacherInput = {
+  staffId: string;
+  classId: string;
+  sectionId?: string;
+  subject?: string;
+  isClassTeacher: boolean;
 };
 
 export type StaffDepartment = {

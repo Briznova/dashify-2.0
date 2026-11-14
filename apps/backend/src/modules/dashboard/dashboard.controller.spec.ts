@@ -133,7 +133,11 @@ describe("DashboardController", () => {
     await expect(
       controller.getTeacherDashboard(request("teacher")),
     ).resolves.toEqual({ schoolId: "school-1" });
-    expect(getTeacherDashboard).toHaveBeenCalledWith("school-1", "user-1");
+    expect(getTeacherDashboard).toHaveBeenCalledWith(
+      "school-1",
+      "user-1",
+      undefined,
+    );
     expect(() =>
       controller.getTeacherDashboard(request("school_admin")),
     ).toThrow(ForbiddenException);

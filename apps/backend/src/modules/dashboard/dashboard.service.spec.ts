@@ -7,6 +7,7 @@ describe("DashboardService school-admin dashboard", () => {
   const schoolId = "school-1";
   const transaction = {
     school: { findFirst: jest.fn() },
+    academicYear: { findFirst: jest.fn() },
     student: { count: jest.fn() },
     staffProfile: { count: jest.fn(), findMany: jest.fn() },
     schoolClass: { count: jest.fn() },
@@ -136,6 +137,13 @@ describe("DashboardService school-admin dashboard", () => {
       name: "Synthetic School",
       timezone: "Asia/Kolkata",
     });
+    transaction.academicYear.findFirst.mockResolvedValue({
+      id: "year-1",
+      name: "2025-26",
+      status: "ACTIVE",
+      startDate: new Date("2025-04-01T00:00:00.000Z"),
+      endDate: new Date("2026-03-31T00:00:00.000Z"),
+    });
     transaction.staffProfile.findMany.mockResolvedValue([{ id: "staff-1" }]);
     transaction.$queryRaw.mockResolvedValue([
       {
@@ -144,7 +152,10 @@ describe("DashboardService school-admin dashboard", () => {
         sectionId: "section-1",
         sectionName: "Section A",
         subject: "Mathematics",
-        sessionStatus: "OPEN",
+        isClassTeacher: true,
+        classTeacherName: "Synthetic Teacher",
+        studentCount: 12,
+        sessionStatus: "DRAFT",
         unmarkedCount: 3,
       },
       {
@@ -153,6 +164,9 @@ describe("DashboardService school-admin dashboard", () => {
         sectionId: "section-2",
         sectionName: "Section B",
         subject: null,
+        isClassTeacher: false,
+        classTeacherName: null,
+        studentCount: 0,
         sessionStatus: null,
         unmarkedCount: null,
       },
@@ -165,6 +179,9 @@ describe("DashboardService school-admin dashboard", () => {
         schoolId,
         schoolName: "Synthetic School",
         localDate: "2026-04-03",
+        academicYearId: "year-1",
+        academicYearName: "2025-26",
+        academicYearStatus: "ACTIVE",
         assignments: [
           {
             classId: "class-1",
@@ -172,7 +189,10 @@ describe("DashboardService school-admin dashboard", () => {
             sectionId: "section-1",
             sectionName: "Section A",
             subject: "Mathematics",
-            sessionStatus: "OPEN",
+            isClassTeacher: true,
+            classTeacherName: "Synthetic Teacher",
+            studentCount: 12,
+            sessionStatus: "DRAFT",
             unmarkedCount: 3,
           },
           {
@@ -181,6 +201,9 @@ describe("DashboardService school-admin dashboard", () => {
             sectionId: "section-2",
             sectionName: "Section B",
             subject: null,
+            isClassTeacher: false,
+            classTeacherName: null,
+            studentCount: 0,
             sessionStatus: null,
             unmarkedCount: null,
           },
@@ -194,6 +217,17 @@ describe("DashboardService school-admin dashboard", () => {
       expect(transaction.staffProfile.findMany).toHaveBeenCalledWith({
         where: { schoolId, userId: "user-1", isActive: true },
         select: { id: true },
+      });
+      expect(transaction.academicYear.findFirst).toHaveBeenCalledWith({
+        where: { schoolId, status: "ACTIVE" },
+        orderBy: { startDate: "desc" },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          startDate: true,
+          endDate: true,
+        },
       });
       const [query] = transaction.$queryRaw.mock.calls[0] as [Prisma.Sql];
       expect(query.text).toContain('"teacher_assignments"');

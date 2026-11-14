@@ -160,6 +160,6 @@ export class StaffController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: AssignTeacherDto,
   ) {
-    return this.staff.assignTeacher(this.school(req), dto);
+    return this.staff.assignTeacher(this.school(req), req.user.id, dto);
   }
 }

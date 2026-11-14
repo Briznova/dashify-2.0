@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     createdAt: string;
   }[],
   permissionKeys: [] as string[],
+  userRole: "school_admin" as "school_admin" | "teacher",
   useAnnouncements: vi.fn(),
 }));
 
@@ -21,7 +22,10 @@ vi.mock("@/services", () => ({ isApiMode: true }));
 
 vi.mock("@/hooks/use-auth", () => ({
   useAuthSession: () => ({
-    session: { permissionKeys: mocks.permissionKeys },
+    session: {
+      permissionKeys: mocks.permissionKeys,
+      user: { role: mocks.userRole },
+    },
     isLoading: false,
   }),
 }));
@@ -43,6 +47,7 @@ describe("AnnouncementsDirectory", () => {
     vi.clearAllMocks();
     mocks.announcements = [];
     mocks.permissionKeys = ["announcements.read"];
+    mocks.userRole = "school_admin";
     mocks.create.mockResolvedValue({ id: "draft-1" });
     mocks.publish.mockResolvedValue({ id: "draft-1" });
     mocks.useAnnouncements.mockReturnValue({
@@ -114,5 +119,24 @@ describe("AnnouncementsDirectory", () => {
     expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
     expect(mocks.useAnnouncements).toHaveBeenCalledWith(false);
+  });
+
+  it("labels the read-only announcements screen as School notices for Teachers", () => {
+    mocks.userRole = "teacher";
+    render(<AnnouncementsDirectory />);
+
+    expect(screen.getByRole("heading", { name: "School notices", level: 1 })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
+    expect(mocks.useAnnouncements).toHaveBeenCalledWith(false);
+  });
+
+  it("keeps the Teacher notices view read-only", () => {
+    mocks.userRole = "teacher";
+
+    render(<AnnouncementsDirectory />);
+
+    expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 });

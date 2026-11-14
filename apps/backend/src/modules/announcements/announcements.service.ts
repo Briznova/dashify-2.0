@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AnnouncementStatus, Prisma } from "@prisma/client";
+import { AnnouncementStatus, NotificationType, Prisma } from "@prisma/client";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { CreateAnnouncementDto } from "./dto/create-announcement.dto";
 
@@ -115,6 +115,28 @@ export class AnnouncementsService {
       const published = await tx.announcement.findFirstOrThrow({
         where: { id, schoolId, status: AnnouncementStatus.PUBLISHED },
       });
+      const teacherMemberships = await tx.schoolMembership.findMany({
+        where: {
+          schoolId,
+          status: "ACTIVE",
+          roles: {
+            some: { role: { is: { key: "TEACHER" } } },
+          },
+          user: { is: { isActive: true } },
+        },
+        select: { userId: true },
+      });
+      if (teacherMemberships.length) {
+        await tx.notification.createMany({
+          data: teacherMemberships.map(({ userId }) => ({
+            userId,
+            schoolId,
+            type: NotificationType.ANNOUNCEMENT,
+            title: published.title,
+            body: "A new school announcement has been published.",
+          })),
+        });
+      }
       await tx.auditLog.create({
         data: {
           schoolId,

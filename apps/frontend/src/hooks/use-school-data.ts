@@ -37,6 +37,18 @@ import type {
   StudentPage,
   StudentDirectorySearch,
   TeacherDashboard,
+  TeacherSections,
+  TeacherAttendance,
+  TeacherAssessment,
+  TeacherAssessmentResults,
+  TeacherAcademicYear,
+  TeacherAttendanceStatus,
+  TeacherAssessmentType,
+  TeacherGradeBand,
+  TeacherGradeScale,
+  TeacherNotifications,
+  TeacherAssignment,
+  AssignTeacherInput,
 } from "@/types/school";
 
 type ResourceState<T> = {
@@ -107,12 +119,223 @@ export function useSchoolOverview(role: SchoolRole) {
   return useRemoteResource<SchoolOverview>(load);
 }
 
-export function useTeacherDashboard() {
+export function useTeacherAcademicYears() {
   const load = useCallback(
-    (signal: AbortSignal) => schoolService.getTeacherDashboard(signal),
+    (signal: AbortSignal) => schoolService.getTeacherAcademicYears(signal),
     [],
   );
+  return useRemoteResource<TeacherAcademicYear[]>(load);
+}
+
+export function useTeacherYearSelection() {
+  const years = useTeacherAcademicYears();
+  const [selectedId, setSelectedId] = useState("");
+  const selectedYear =
+    years.data?.find((year) => year.id === selectedId) ??
+    years.data?.find((year) => year.status === "ACTIVE") ??
+    null;
+  return {
+    years,
+    selectedYear,
+    selectedYearId: selectedYear?.id ?? "",
+    setSelectedYearId: setSelectedId,
+    isReadOnly: selectedYear !== null && selectedYear.status !== "ACTIVE",
+  };
+}
+
+export function useTeacherDashboard(academicYearId?: string) {
+  const load = useCallback(
+    (signal: AbortSignal) =>
+      schoolService.getTeacherDashboard(academicYearId, signal),
+    [academicYearId],
+  );
   return useRemoteResource<TeacherDashboard>(load);
+}
+
+export function useTeacherSections(
+  academicYearId?: string,
+  enabled = true,
+) {
+  const load = useCallback(
+    (signal: AbortSignal) =>
+      schoolService.getTeacherSections(academicYearId, signal),
+    [academicYearId],
+  );
+  return useRemoteResource<TeacherSections>(enabled ? load : null);
+}
+
+export function useTeacherAttendance(
+  academicYearId: string,
+  sectionId: string,
+  date: string,
+) {
+  const load = useCallback(
+    (signal: AbortSignal) =>
+      schoolService.getTeacherAttendance(
+        academicYearId,
+        sectionId,
+        date,
+        signal,
+      ),
+    [academicYearId, sectionId, date],
+  );
+  return useRemoteResource<TeacherAttendance>(
+    academicYearId && sectionId && date ? load : null,
+  );
+}
+
+export function useTeacherAssessments(
+  academicYearId?: string,
+  sectionId?: string,
+) {
+  const load = useCallback(
+    (signal: AbortSignal) =>
+      schoolService.getTeacherAssessments(academicYearId, sectionId, signal),
+    [academicYearId, sectionId],
+  );
+  return useRemoteResource<TeacherAssessment[]>(load);
+}
+
+export function useTeacherResults(assessmentId: string) {
+  const load = useCallback(
+    (signal: AbortSignal) => schoolService.getTeacherResults(assessmentId, signal),
+    [assessmentId],
+  );
+  return useRemoteResource<TeacherAssessmentResults>(
+    assessmentId ? load : null,
+  );
+}
+
+export function useGradeScale(academicYearId: string) {
+  const load = useCallback(
+    (signal: AbortSignal) => schoolService.getGradeScale(academicYearId, signal),
+    [academicYearId],
+  );
+  return useRemoteResource<TeacherGradeScale>(academicYearId ? load : null);
+}
+
+export function useNotifications(enabled = true) {
+  const load = useCallback(
+    (signal: AbortSignal) => schoolService.getNotifications(signal),
+    [],
+  );
+  return useRemoteResource<TeacherNotifications>(enabled ? load : null);
+}
+
+export function useTeacherAssignments(enabled = true) {
+  const load = useCallback(
+    (signal: AbortSignal) => schoolService.getTeacherAssignments(signal),
+    [],
+  );
+  return useRemoteResource<TeacherAssignment[]>(enabled ? load : null);
+}
+
+export function useTeacherActions() {
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = useCallback(async <T,>(action: () => Promise<T>): Promise<T | null> => {
+    setIsPending(true);
+    setError(null);
+    try {
+      return await action();
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Unable to update teacher data.",
+      );
+      return null;
+    } finally {
+      setIsPending(false);
+    }
+  }, []);
+
+  const saveAttendanceDraft = useCallback(
+    (input: {
+      academicYearId: string;
+      sectionId: string;
+      date: string;
+      records: {
+        studentId: string;
+        status: TeacherAttendanceStatus;
+        remarks?: string;
+      }[];
+    }) => run(() => schoolService.saveTeacherAttendanceDraft(input)),
+    [run],
+  );
+  const submitAttendance = useCallback(
+    (input: { academicYearId: string; sectionId: string; date: string }) =>
+      run(() => schoolService.submitTeacherAttendance(input)),
+    [run],
+  );
+  const createAssessment = useCallback(
+    (input: {
+      academicYearId: string;
+      sectionId: string;
+      type: TeacherAssessmentType;
+      title: string;
+      description?: string;
+      dueDate: string;
+      startTime?: string;
+      durationMinutes?: number;
+      maxScore: number;
+      passMark: number;
+    }) => run(() => schoolService.createTeacherAssessment(input)),
+    [run],
+  );
+  const publishAssessment = useCallback(
+    (id: string) => run(() => schoolService.publishTeacherAssessment(id)),
+    [run],
+  );
+  const saveResults = useCallback(
+    (
+      assessmentId: string,
+      input: {
+        records: {
+          studentId: string;
+          score: number;
+          feedback?: string;
+        }[];
+      },
+    ) =>
+      run(() => schoolService.saveTeacherResults(assessmentId, input)),
+    [run],
+  );
+  const publishResults = useCallback(
+    (assessmentId: string) =>
+      run(() => schoolService.publishTeacherResults(assessmentId)),
+    [run],
+  );
+  const saveGradeScale = useCallback(
+    (academicYearId: string, bands: TeacherGradeBand[]) =>
+      run(() => schoolService.saveGradeScale(academicYearId, bands)),
+    [run],
+  );
+  const markNotificationRead = useCallback(
+    (id: string) => run(() => schoolService.markNotificationRead(id)),
+    [run],
+  );
+  const markAllNotificationsRead = useCallback(
+    () => run(() => schoolService.markAllNotificationsRead()),
+    [run],
+  );
+  const assignTeacher = useCallback(
+    (input: AssignTeacherInput) => run(() => schoolService.assignTeacher(input)),
+    [run],
+  );
+
+  return {
+    saveAttendanceDraft,
+    submitAttendance,
+    createAssessment,
+    publishAssessment,
+    saveResults,
+    publishResults,
+    saveGradeScale,
+    markNotificationRead,
+    markAllNotificationsRead,
+    assignTeacher,
+    isPending,
+    error,
+  };
 }
 
 export function usePortalOverview(role: PortalRole) {

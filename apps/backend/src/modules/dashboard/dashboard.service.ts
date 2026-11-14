@@ -23,7 +23,10 @@ type TeacherDashboardAssignmentRow = {
   sectionId: string;
   sectionName: string;
   subject: string | null;
-  sessionStatus: "OPEN" | "CLOSED" | null;
+  isClassTeacher: boolean;
+  classTeacherName: string | null;
+  studentCount: number;
+  sessionStatus: "DRAFT" | "SUBMITTED" | "OPEN" | "CLOSED" | null;
   unmarkedCount: number | null;
 };
 
@@ -167,6 +170,7 @@ export class DashboardService {
   async getTeacherDashboard(
     schoolId: string,
     userId: string,
+    academicYearId?: string,
   ): Promise<TeacherDashboardDto> {
     return this.prisma.withTenant(schoolId, async (tx) => {
       const school = await tx.school.findFirst({
@@ -186,6 +190,22 @@ export class DashboardService {
       }
 
       const localDate = schoolLocalDate(new Date(), school.timezone);
+      const academicYear = await tx.academicYear.findFirst({
+        where: academicYearId
+          ? { id: academicYearId, schoolId }
+          : { schoolId, status: "ACTIVE" },
+        orderBy: { startDate: "desc" },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          startDate: true,
+          endDate: true,
+        },
+      });
+      if (academicYearId && !academicYear) {
+        throw new NotFoundException("Academic year not found");
+      }
       const assignments = await tx.$queryRaw<TeacherDashboardAssignmentRow[]>(
         Prisma.sql`
           WITH assigned_sections AS (
@@ -197,7 +217,10 @@ export class DashboardService {
               ) AS "section_subject",
               MAX(assignment."subject") FILTER (
                 WHERE assignment."section_id" IS NULL
-              ) AS "class_subject"
+              ) AS "class_subject",
+              BOOL_OR(assignment."is_class_teacher") FILTER (
+                WHERE assignment."section_id" = section."id"
+              ) AS "is_class_teacher"
             FROM "teacher_assignments" AS assignment
             JOIN "classes" AS class
               ON class."id" = assignment."class_id"
@@ -225,6 +248,16 @@ export class DashboardService {
               assigned."section_subject",
               assigned."class_subject"
             ) AS "subject",
+            COALESCE(assigned."is_class_teacher", FALSE) AS "isClassTeacher",
+            CASE
+              WHEN class_teacher_staff."id" IS NULL THEN NULL
+              ELSE CONCAT_WS(
+                ' ',
+                class_teacher_staff."first_name",
+                class_teacher_staff."last_name"
+              )
+            END AS "classTeacherName",
+            COUNT(DISTINCT student."id")::int AS "studentCount",
             session."status"::text AS "sessionStatus",
             CASE
               WHEN session."id" IS NULL THEN NULL
@@ -245,20 +278,29 @@ export class DashboardService {
             AND session."class_id" = class."id"
             AND session."section_id" = section."id"
             AND session."date" = ${localDate}::date
+            AND ${academicYear?.id ?? null}::uuid IS NOT NULL
+            AND ${localDate}::date >= ${academicYear?.startDate ?? null}::date
+            AND ${localDate}::date <= ${academicYear?.endDate ?? null}::date
           LEFT JOIN "student_enrolments" AS enrolment
             ON enrolment."school_id" = ${schoolId}::uuid
+            AND enrolment."academic_year_id" = ${academicYear?.id ?? null}::uuid
             AND enrolment."class_id" = class."id"
             AND enrolment."section_id" = section."id"
             AND enrolment."is_active" = TRUE
-            AND enrolment."start_date" <= session."date"
-            AND (
-              enrolment."end_date" IS NULL
-              OR enrolment."end_date" >= session."date"
-            )
           LEFT JOIN "students" AS student
             ON student."id" = enrolment."student_id"
             AND student."school_id" = ${schoolId}::uuid
             AND student."status"::text = 'ACTIVE'
+          LEFT JOIN "teacher_assignments" AS class_teacher
+            ON class_teacher."school_id" = ${schoolId}::uuid
+            AND class_teacher."class_id" = class."id"
+            AND class_teacher."section_id" = section."id"
+            AND class_teacher."is_active" = TRUE
+            AND class_teacher."is_class_teacher" = TRUE
+          LEFT JOIN "staff_profiles" AS class_teacher_staff
+            ON class_teacher_staff."id" = class_teacher."staff_id"
+            AND class_teacher_staff."school_id" = ${schoolId}::uuid
+            AND class_teacher_staff."is_active" = TRUE
           LEFT JOIN "attendance_records" AS record
             ON record."session_id" = session."id"
             AND record."student_id" = student."id"
@@ -272,6 +314,10 @@ export class DashboardService {
             section."code",
             assigned."section_subject",
             assigned."class_subject",
+            assigned."is_class_teacher",
+            class_teacher_staff."id",
+            class_teacher_staff."first_name",
+            class_teacher_staff."last_name",
             session."id",
             session."status"
           ORDER BY class."sort_order", class."name", section."name"
@@ -282,6 +328,9 @@ export class DashboardService {
         schoolId: school.id,
         schoolName: school.name,
         localDate,
+        academicYearId: academicYear?.id ?? null,
+        academicYearName: academicYear?.name ?? null,
+        academicYearStatus: academicYear?.status ?? null,
         assignments,
       };
     });

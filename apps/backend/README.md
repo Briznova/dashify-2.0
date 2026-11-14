@@ -78,6 +78,10 @@ configured password affects only future accounts, not existing password hashes.
 Replace this temporary mechanism with individual credential setup before
 relying on it for production.
 
+For local development only, set `SCHOOL_ADMIN_EMAIL` to an existing School
+Admin account to show a sign-in shortcut in the frontend. The shortcut uses
+`SCHOOL_ADMIN_DEFAULT_PASSWORD`; it does not create or seed an account.
+
 ## Authentication flow
 
 1. `POST /api/v1/auth/login` with email/password.

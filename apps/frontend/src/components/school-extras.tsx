@@ -6,6 +6,8 @@ import {
   useCreateAcademicYear,
   useFees,
   usePortalOverview,
+  useGradeScale,
+  useTeacherActions,
 } from "@/hooks/use-school-data";
 import { useAuthSession } from "@/hooks/use-auth";
 import type {
@@ -14,6 +16,7 @@ import type {
   FeeRecord,
   PortalAction,
   PortalRole,
+  TeacherGradeBand,
 } from "@/types/school";
 import { isApiMode } from "@/services";
 import { useState, type FormEvent } from "react";
@@ -221,10 +224,38 @@ function ApiAcademicYears() {
   const resource = useAcademicYears();
   const { session } = useAuthSession();
   const { create, isPending, error } = useCreateAcademicYear();
+  const gradeScaleActions = useTeacherActions();
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [scaleYearId, setScaleYearId] = useState("");
+  const [bandsByYear, setBandsByYear] = useState<
+    Record<string, TeacherGradeBand[]>
+  >({});
   const canCreate = Boolean(session?.permissionKeys.includes("academic_structure.manage"));
+  const activeScaleYearId =
+    scaleYearId ||
+    resource.data?.find((year) => year.status === "ACTIVE")?.id ||
+    "";
+  const gradeScale = useGradeScale(activeScaleYearId);
+  const bands =
+    bandsByYear[activeScaleYearId] ??
+    gradeScale.data?.bands.map((band) => ({ ...band })) ??
+    [];
+
+  function updateBands(
+    update: (current: TeacherGradeBand[]) => TeacherGradeBand[],
+  ) {
+    if (!activeScaleYearId) return;
+    setBandsByYear((current) => ({
+      ...current,
+      [activeScaleYearId]: update(
+        current[activeScaleYearId] ??
+          gradeScale.data?.bands.map((band) => ({ ...band })) ??
+          [],
+      ),
+    }));
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -235,6 +266,32 @@ function ApiAcademicYears() {
       setEndDate("");
       resource.refresh();
     }
+  }
+
+  function addGradeBand() {
+    updateBands((current) => {
+      if (current.length === 0) {
+        return [{ label: "", minPercent: 0, maxPercent: 100 }];
+      }
+      const last = current.at(-1);
+      if (!last || last.maxPercent <= last.minPercent) return current;
+      const split = Math.floor((last.minPercent + last.maxPercent) / 2);
+      return [
+        ...current.slice(0, -1),
+        { ...last, maxPercent: split },
+        { label: "", minPercent: split + 1, maxPercent: last.maxPercent },
+      ];
+    });
+  }
+
+  async function saveScale(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeScaleYearId || !canCreate) return;
+    const saved = await gradeScaleActions.saveGradeScale(
+      activeScaleYearId,
+      bands,
+    );
+    if (saved) gradeScale.refresh();
   }
 
   const columns: DataTableColumn<AcademicYear>[] = [
@@ -259,6 +316,154 @@ function ApiAcademicYears() {
         </Panel>
       )}
       {!canCreate && <p className={styles.portalHint}>You have read-only access to academic years.</p>}
+      <Panel
+        title="Grading scale"
+        description="Configure percentage bands for an academic year. Bands must cover 0-100 without gaps or overlaps."
+      >
+        {resource.data && resource.data.length > 0 && (
+          <label className={styles.gradeScaleYear}>
+            Academic year
+            <select
+              value={activeScaleYearId}
+              onChange={(event) => setScaleYearId(event.target.value)}
+            >
+              {resource.data.map((year) => (
+                <option key={year.id} value={year.id}>
+                  {year.name} · {year.status}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {!resource.data?.length && !resource.isLoading && (
+          <p className={styles.emptyState}>
+            Create an academic year before setting its grade scale.
+          </p>
+        )}
+        {activeScaleYearId && (
+          <>
+            <ResourceState
+              error={gradeScale.error}
+              isLoading={gradeScale.isLoading}
+              onRetry={gradeScale.refresh}
+            />
+            {gradeScale.data && (
+              <>
+                {gradeScale.data.bands.length === 0 && (
+                  <p className={styles.emptyState}>
+                    No grading scale is configured for this year.
+                  </p>
+                )}
+                <form className={styles.gradeScaleForm} onSubmit={saveScale}>
+                  <div className={styles.gradeScaleRows}>
+                    {bands.map((band, index) => (
+                      <div className={styles.gradeBandRow} key={band.id ?? index}>
+                        <label>
+                          Grade label
+                          <input
+                            value={band.label}
+                            maxLength={20}
+                            disabled={!canCreate}
+                            onChange={(event) =>
+                              updateBands((current) =>
+                                current.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, label: event.target.value }
+                                    : item,
+                                ),
+                              )
+                            }
+                            required
+                          />
+                        </label>
+                        <label>
+                          Minimum %
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={band.minPercent}
+                            disabled={!canCreate}
+                            onChange={(event) =>
+                              updateBands((current) =>
+                                current.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, minPercent: Number(event.target.value) }
+                                    : item,
+                                ),
+                              )
+                            }
+                            required
+                          />
+                        </label>
+                        <label>
+                          Maximum %
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={band.maxPercent}
+                            disabled={!canCreate}
+                            onChange={(event) =>
+                              updateBands((current) =>
+                                current.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, maxPercent: Number(event.target.value) }
+                                    : item,
+                                ),
+                              )
+                            }
+                            required
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className={styles.removeGradeBand}
+                          disabled={!canCreate}
+                          onClick={() =>
+                            updateBands((current) =>
+                              current.filter((_, itemIndex) => itemIndex !== index),
+                            )
+                          }
+                          aria-label={`Remove grade band ${band.label || index + 1}`}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {canCreate && (
+                    <div className={styles.gradeScaleActions}>
+                      <button
+                        type="button"
+                        className={styles.addGradeBand}
+                        onClick={addGradeBand}
+                      >
+                        Add grade band
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={
+                          gradeScaleActions.isPending || bands.length === 0
+                        }
+                      >
+                        {gradeScaleActions.isPending
+                          ? "Saving..."
+                          : "Save grading scale"}
+                      </button>
+                    </div>
+                  )}
+                  {gradeScaleActions.error && (
+                    <p className={styles.gradeScaleError} role="alert">
+                      {gradeScaleActions.error}
+                    </p>
+                  )}
+                </form>
+              </>
+            )}
+          </>
+        )}
+      </Panel>
       <DataTable
         title="Academic years"
         description="Academic periods configured for the active school."

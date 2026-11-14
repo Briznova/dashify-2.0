@@ -43,6 +43,21 @@ import type {
   SchoolProfile,
   TeacherDashboard,
   TeacherDashboardAssignment,
+  TeacherSection,
+  TeacherAttendance,
+  TeacherAttendanceStatus,
+  TeacherAssessment,
+  TeacherAssessmentResults,
+  TeacherAssessmentType,
+  TeacherAssessmentStatus,
+  TeacherAttendanceSessionStatus,
+  TeacherAcademicYear,
+  TeacherSections,
+  TeacherGradeBand,
+  TeacherGradeScale,
+  TeacherNotifications,
+  TeacherAssignment,
+  AssignTeacherInput,
   UpdateStaffInput,
   UpdateSchoolProfileInput,
   UpdateClassroomInput,
@@ -272,6 +287,15 @@ function parseTeacherDashboard(response: unknown): TeacherDashboard {
   if (
     !isRecord(response) ||
     !isValidCalendarDate(response.localDate) ||
+    (response.academicYearId !== null &&
+      response.academicYearId !== undefined &&
+      typeof response.academicYearId !== "string") ||
+    (response.academicYearName !== undefined &&
+      response.academicYearName !== null &&
+      typeof response.academicYearName !== "string") ||
+    (response.academicYearStatus !== null &&
+      response.academicYearStatus !== undefined &&
+      typeof response.academicYearStatus !== "string") ||
     !Array.isArray(response.assignments)
   ) {
     throw new ApiError(
@@ -293,7 +317,17 @@ function parseTeacherDashboard(response: unknown): TeacherDashboard {
         typeof item.sectionName !== "string" ||
         !item.sectionName.trim() ||
         (item.subject !== null && typeof item.subject !== "string") ||
+        typeof item.isClassTeacher !== "boolean" ||
+        (item.classTeacherName !== null &&
+          typeof item.classTeacherName !== "string") ||
+        (item.studentCount !== undefined &&
+          item.studentCount !== null &&
+          (typeof item.studentCount !== "number" ||
+            !Number.isSafeInteger(item.studentCount) ||
+            item.studentCount < 0)) ||
         (item.sessionStatus !== null &&
+          item.sessionStatus !== "DRAFT" &&
+          item.sessionStatus !== "SUBMITTED" &&
           item.sessionStatus !== "OPEN" &&
           item.sessionStatus !== "CLOSED") ||
         (item.unmarkedCount !== null &&
@@ -315,13 +349,505 @@ function parseTeacherDashboard(response: unknown): TeacherDashboard {
         sectionId: item.sectionId,
         sectionName: item.sectionName,
         subject: item.subject,
+        studentCount:
+          typeof item.studentCount === "number" ? item.studentCount : null,
+        isClassTeacher: item.isClassTeacher,
+        classTeacherName: item.classTeacherName,
         sessionStatus: item.sessionStatus,
         unmarkedCount: item.unmarkedCount,
       };
     },
   );
 
-  return { schoolId, schoolName, localDate: response.localDate, assignments };
+  return {
+    schoolId,
+    schoolName,
+    localDate: response.localDate,
+    academicYearId:
+      typeof response.academicYearId === "string"
+        ? response.academicYearId
+        : null,
+    academicYearName:
+      typeof response.academicYearName === "string"
+        ? response.academicYearName
+        : null,
+    academicYearStatus:
+      typeof response.academicYearStatus === "string"
+        ? response.academicYearStatus
+        : null,
+    assignments,
+  };
+}
+
+function parseTeacherAcademicYears(response: unknown): TeacherAcademicYear[] {
+  if (!Array.isArray(response)) {
+    throw new ApiError(
+      "The Dashify service returned invalid teacher academic years.",
+      502,
+    );
+  }
+  return response.map((item, index) => {
+    if (
+      !isRecord(item) ||
+      typeof item.id !== "string" ||
+      typeof item.name !== "string" ||
+      typeof item.startDate !== "string" ||
+      !isValidCalendarDate(item.startDate.slice(0, 10)) ||
+      typeof item.endDate !== "string" ||
+      !isValidCalendarDate(item.endDate.slice(0, 10)) ||
+      typeof item.status !== "string"
+    ) {
+      throw new ApiError(
+        `The Dashify service returned invalid teacher academic year ${index + 1}.`,
+        502,
+      );
+    }
+    return {
+      id: item.id,
+      name: item.name,
+      startDate: item.startDate,
+      endDate: item.endDate,
+      status: item.status,
+    };
+  });
+}
+
+function parseTeacherSections(response: unknown): TeacherSections {
+  if (
+    !isRecord(response) ||
+    !Array.isArray(response.sections) ||
+    (response.academicYear !== null &&
+      (!isRecord(response.academicYear) ||
+        typeof response.academicYear.id !== "string" ||
+        typeof response.academicYear.name !== "string" ||
+        typeof response.academicYear.status !== "string"))
+  ) {
+    throw new ApiError("The Dashify service returned invalid teacher sections.", 502);
+  }
+  const sections: TeacherSection[] = response.sections.map((item, index) => {
+    if (
+      !isRecord(item) ||
+      typeof item.id !== "string" ||
+      !item.id.trim() ||
+      typeof item.name !== "string" ||
+      !item.name.trim() ||
+      typeof item.classId !== "string" ||
+      !item.classId.trim() ||
+      typeof item.className !== "string" ||
+      !item.className.trim() ||
+      (item.subject !== null && typeof item.subject !== "string") ||
+      typeof item.isClassTeacher !== "boolean" ||
+      (item.classTeacherName !== null &&
+        typeof item.classTeacherName !== "string") ||
+      (item.studentCount !== null &&
+        (typeof item.studentCount !== "number" ||
+          !Number.isSafeInteger(item.studentCount) ||
+          item.studentCount < 0))
+    ) {
+      throw new ApiError(
+        `The Dashify service returned invalid teacher section ${index + 1}.`,
+        502,
+      );
+    }
+    return {
+      id: item.id,
+      name: item.name,
+      classId: item.classId,
+      className: item.className,
+      subject: item.subject,
+      isClassTeacher: item.isClassTeacher,
+      classTeacherName: item.classTeacherName,
+      studentCount:
+        typeof item.studentCount === "number" ? item.studentCount : null,
+    };
+  });
+  return {
+    academicYear:
+      response.academicYear === null
+        ? null
+        : {
+            id: response.academicYear.id as string,
+            name: response.academicYear.name as string,
+            status: response.academicYear.status as string,
+          },
+    sections,
+  };
+}
+
+const teacherAttendanceStatuses: readonly TeacherAttendanceStatus[] = [
+  "PRESENT",
+  "ABSENT",
+  "LATE",
+  "EXCUSED",
+];
+const teacherAttendanceSessionStatuses: readonly TeacherAttendanceSessionStatus[] =
+  ["DRAFT", "SUBMITTED", "OPEN", "CLOSED"];
+
+function parseTeacherAttendance(response: unknown): TeacherAttendance {
+  if (
+    !isRecord(response) ||
+    !isRecord(response.academicYear) ||
+    typeof response.academicYear.id !== "string" ||
+    typeof response.academicYear.name !== "string" ||
+    typeof response.academicYear.status !== "string" ||
+    !isRecord(response.section) ||
+    typeof response.section.id !== "string" ||
+    typeof response.section.name !== "string" ||
+    typeof response.section.classId !== "string" ||
+    typeof response.section.className !== "string" ||
+    !isValidCalendarDate(response.date) ||
+    (response.status !== null &&
+      !teacherAttendanceSessionStatuses.includes(
+        response.status as TeacherAttendanceSessionStatus,
+      )) ||
+    typeof response.canEdit !== "boolean" ||
+    !Array.isArray(response.students)
+  ) {
+    throw new ApiError("The Dashify service returned invalid teacher attendance.", 502);
+  }
+  return {
+    academicYear: {
+      id: response.academicYear.id,
+      name: response.academicYear.name,
+      status: response.academicYear.status,
+    },
+    section: {
+      id: response.section.id,
+      name: response.section.name,
+      classId: response.section.classId,
+      className: response.section.className,
+    },
+    date: response.date,
+    status: response.status as TeacherAttendanceSessionStatus | null,
+    canEdit: response.canEdit,
+    students: response.students.map((item, index) => {
+      if (
+        !isRecord(item) ||
+        typeof item.studentId !== "string" ||
+        !item.studentId.trim() ||
+        (item.rollNumber !== null && typeof item.rollNumber !== "string") ||
+        typeof item.name !== "string" ||
+        (item.status !== null &&
+          !teacherAttendanceStatuses.includes(
+            item.status as TeacherAttendanceStatus,
+          )) ||
+        (item.remarks !== null && typeof item.remarks !== "string") ||
+        (typeof item.remarks === "string" && item.remarks.length > 500)
+      ) {
+        throw new ApiError(
+          `The Dashify service returned invalid teacher attendance row ${index + 1}.`,
+          502,
+        );
+      }
+      return {
+        studentId: item.studentId,
+        rollNumber: item.rollNumber,
+        name: item.name,
+        status: item.status as TeacherAttendanceStatus | null,
+        remarks: item.remarks,
+      };
+    }),
+  };
+}
+
+function parseTeacherAssessment(item: unknown): TeacherAssessment {
+  if (
+    !isRecord(item) ||
+    typeof item.id !== "string" ||
+    !item.id.trim() ||
+    typeof item.sectionId !== "string" ||
+    !item.sectionId.trim() ||
+    (item.type !== "ASSIGNMENT" &&
+      item.type !== "EXAM" &&
+      item.type !== "TEST") ||
+    (item.status !== "DRAFT" && item.status !== "PUBLISHED") ||
+    typeof item.title !== "string" ||
+    (item.description !== null && typeof item.description !== "string") ||
+    !isValidCalendarDate(item.dueDate) ||
+    (item.startTime !== null &&
+      (typeof item.startTime !== "string" ||
+        !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(item.startTime))) ||
+    (item.durationMinutes !== null &&
+      (typeof item.durationMinutes !== "number" ||
+        !Number.isSafeInteger(item.durationMinutes) ||
+        item.durationMinutes < 1 ||
+        item.durationMinutes > 1440)) ||
+    typeof item.maxScore !== "number" ||
+    !Number.isSafeInteger(item.maxScore) ||
+    item.maxScore < 1 ||
+    (item.passMark !== null &&
+      (typeof item.passMark !== "number" ||
+        !Number.isSafeInteger(item.passMark) ||
+        item.passMark < 0 ||
+        item.passMark > item.maxScore)) ||
+    (item.academicYearId !== null &&
+      typeof item.academicYearId !== "string") ||
+    (item.publishedAt !== null &&
+      (typeof item.publishedAt !== "string" ||
+        !Number.isFinite(Date.parse(item.publishedAt)))) ||
+    (item.resultsStatus !== "DRAFT" && item.resultsStatus !== "PUBLISHED") ||
+    typeof item.className !== "string" ||
+    typeof item.sectionName !== "string" ||
+    typeof item.resultCount !== "number" ||
+    !Number.isSafeInteger(item.resultCount) ||
+    item.resultCount < 0
+  ) {
+    throw new ApiError("The Dashify service returned invalid teacher assessment data.", 502);
+  }
+  return {
+    id: item.id,
+    sectionId: item.sectionId,
+    type: item.type as TeacherAssessmentType,
+    status: item.status as TeacherAssessmentStatus,
+    title: item.title,
+    description: item.description,
+    dueDate: item.dueDate,
+    startTime: item.startTime,
+    durationMinutes: item.durationMinutes,
+    maxScore: item.maxScore,
+    passMark: item.passMark,
+    academicYearId: item.academicYearId,
+    publishedAt: item.publishedAt,
+    resultsStatus: item.resultsStatus,
+    className: item.className,
+    sectionName: item.sectionName,
+    resultCount: item.resultCount,
+  };
+}
+
+function parseTeacherAssessments(response: unknown): TeacherAssessment[] {
+  if (!Array.isArray(response)) {
+    throw new ApiError("The Dashify service returned invalid teacher assessments.", 502);
+  }
+  return response.map(parseTeacherAssessment);
+}
+
+function parseTeacherResults(response: unknown): TeacherAssessmentResults {
+  if (
+    !isRecord(response) ||
+    !isRecord(response.assessment) ||
+    typeof response.assessment.id !== "string" ||
+    typeof response.assessment.title !== "string" ||
+    (response.assessment.type !== "ASSIGNMENT" &&
+      response.assessment.type !== "EXAM" &&
+      response.assessment.type !== "TEST") ||
+    !isValidCalendarDate(response.assessment.dueDate) ||
+    (response.assessment.startTime !== null &&
+      (typeof response.assessment.startTime !== "string" ||
+        !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(
+          response.assessment.startTime,
+        ))) ||
+    (response.assessment.durationMinutes !== null &&
+      (typeof response.assessment.durationMinutes !== "number" ||
+        !Number.isSafeInteger(response.assessment.durationMinutes) ||
+        response.assessment.durationMinutes < 1 ||
+        response.assessment.durationMinutes > 1440)) ||
+    (response.assessment.resultsStatus !== "DRAFT" &&
+      response.assessment.resultsStatus !== "PUBLISHED") ||
+    typeof response.assessment.maxScore !== "number" ||
+    !Number.isSafeInteger(response.assessment.maxScore) ||
+    response.assessment.maxScore < 1 ||
+    (response.assessment.passMark !== null &&
+      (typeof response.assessment.passMark !== "number" ||
+        !Number.isSafeInteger(response.assessment.passMark) ||
+        response.assessment.passMark < 0 ||
+        response.assessment.passMark > response.assessment.maxScore)) ||
+    typeof response.assessment.academicYearId !== "string" ||
+    typeof response.assessment.academicYearName !== "string" ||
+    (response.assessment.resultsPublishedAt !== null &&
+      (typeof response.assessment.resultsPublishedAt !== "string" ||
+        !Number.isFinite(Date.parse(response.assessment.resultsPublishedAt)))) ||
+    typeof response.assessment.gradesConfigured !== "boolean" ||
+    typeof response.assessment.className !== "string" ||
+    typeof response.assessment.sectionName !== "string" ||
+    !Array.isArray(response.students)
+  ) {
+    throw new ApiError("The Dashify service returned invalid teacher results.", 502);
+  }
+  const maxScore = response.assessment.maxScore;
+  return {
+    assessment: {
+      id: response.assessment.id,
+      title: response.assessment.title,
+      type: response.assessment.type as TeacherAssessmentType,
+      dueDate: response.assessment.dueDate,
+      startTime: response.assessment.startTime,
+      durationMinutes: response.assessment.durationMinutes,
+      maxScore: response.assessment.maxScore,
+      passMark: response.assessment.passMark,
+      academicYearId: response.assessment.academicYearId,
+      resultsStatus: response.assessment.resultsStatus,
+      className: response.assessment.className,
+      sectionName: response.assessment.sectionName,
+      academicYearName: response.assessment.academicYearName,
+      resultsPublishedAt: response.assessment.resultsPublishedAt,
+      gradesConfigured: response.assessment.gradesConfigured,
+    },
+    students: response.students.map((item, index) => {
+      if (
+        !isRecord(item) ||
+        typeof item.studentId !== "string" ||
+        (item.rollNumber !== null && typeof item.rollNumber !== "string") ||
+        typeof item.name !== "string" ||
+        (item.score !== null &&
+          (typeof item.score !== "number" ||
+            !Number.isSafeInteger(item.score) ||
+            item.score < 0 ||
+            item.score > maxScore)) ||
+        (item.feedback !== null &&
+          (typeof item.feedback !== "string" || item.feedback.length > 2000)) ||
+        (item.updatedAt !== null &&
+          (typeof item.updatedAt !== "string" ||
+            !Number.isFinite(Date.parse(item.updatedAt)))) ||
+        (item.passed !== null && typeof item.passed !== "boolean") ||
+        (item.grade !== null && typeof item.grade !== "string")
+      ) {
+        throw new ApiError(
+          `The Dashify service returned invalid teacher result row ${index + 1}.`,
+          502,
+        );
+      }
+      return {
+        studentId: item.studentId,
+        rollNumber: item.rollNumber,
+        name: item.name,
+        score: item.score,
+        feedback: item.feedback,
+        updatedAt: item.updatedAt,
+        passed: item.passed,
+        grade: item.grade,
+      };
+    }),
+  };
+}
+
+function parseTeacherGradeScale(response: unknown): TeacherGradeScale {
+  if (
+    !isRecord(response) ||
+    typeof response.academicYearId !== "string" ||
+    typeof response.academicYearName !== "string" ||
+    !Array.isArray(response.bands)
+  ) {
+    throw new ApiError("The Dashify service returned invalid grade-scale data.", 502);
+  }
+  return {
+    academicYearId: response.academicYearId,
+    academicYearName: response.academicYearName,
+    bands: response.bands.map((band, index) => {
+      if (
+        !isRecord(band) ||
+        typeof band.label !== "string" ||
+        typeof band.minPercent !== "number" ||
+        !Number.isSafeInteger(band.minPercent) ||
+        typeof band.maxPercent !== "number" ||
+        !Number.isSafeInteger(band.maxPercent) ||
+        band.minPercent < 0 ||
+        band.maxPercent > 100 ||
+        band.minPercent > band.maxPercent
+      ) {
+        throw new ApiError(
+          `The Dashify service returned invalid grade band ${index + 1}.`,
+          502,
+        );
+      }
+      return {
+        ...(typeof band.id === "string" ? { id: band.id } : {}),
+        label: band.label,
+        minPercent: band.minPercent,
+        maxPercent: band.maxPercent,
+      };
+    }),
+  }
+}
+
+function parseTeacherNotifications(response: unknown): TeacherNotifications {
+  const types = ["GENERAL", "ATTENDANCE", "FEE", "ANNOUNCEMENT", "SYSTEM"];
+  if (
+    !isRecord(response) ||
+    !Array.isArray(response.notifications) ||
+    typeof response.unreadCount !== "number" ||
+    !Number.isSafeInteger(response.unreadCount) ||
+    response.unreadCount < 0
+  ) {
+    throw new ApiError("The Dashify service returned invalid notifications.", 502);
+  }
+  return {
+    notifications: response.notifications.map((item, index) => {
+      if (
+        !isRecord(item) ||
+        typeof item.id !== "string" ||
+        typeof item.type !== "string" ||
+        !types.includes(item.type) ||
+        typeof item.title !== "string" ||
+        typeof item.body !== "string" ||
+        (item.readAt !== null &&
+          (typeof item.readAt !== "string" ||
+            !Number.isFinite(Date.parse(item.readAt)))) ||
+        typeof item.createdAt !== "string" ||
+        !Number.isFinite(Date.parse(item.createdAt))
+      ) {
+        throw new ApiError(
+          `The Dashify service returned invalid notification ${index + 1}.`,
+          502,
+        );
+      }
+      return {
+        id: item.id,
+        type: item.type as TeacherNotifications["notifications"][number]["type"],
+        title: item.title,
+        body: item.body,
+        readAt: item.readAt,
+        createdAt: item.createdAt,
+      };
+    }),
+    unreadCount: response.unreadCount,
+  };
+}
+
+function parseTeacherAssignment(item: unknown): TeacherAssignment {
+  if (
+    !isRecord(item) ||
+    typeof item.id !== "string" ||
+    typeof item.staffId !== "string" ||
+    typeof item.classId !== "string" ||
+    (item.sectionId !== null && typeof item.sectionId !== "string") ||
+    (item.subject !== null && typeof item.subject !== "string") ||
+    typeof item.isClassTeacher !== "boolean" ||
+    !isRecord(item.staff) ||
+    !isRecord(item.class) ||
+    (item.section !== null && !isRecord(item.section))
+  ) {
+    throw new ApiError("The Dashify service returned invalid teacher assignment data.", 502);
+  }
+  const staffName = [item.staff.firstName, item.staff.lastName]
+    .filter(
+      (name): name is string =>
+        typeof name === "string" && Boolean(name.trim()),
+    )
+    .join(" ");
+  const section = isRecord(item.section) ? item.section : null;
+  const sectionId =
+    typeof item.sectionId === "string" ? item.sectionId : null;
+  const subject = typeof item.subject === "string" ? item.subject : null;
+  if (
+    typeof item.class.name !== "string" ||
+    (section !== null && typeof section.name !== "string")
+  ) {
+    throw new ApiError("The Dashify service returned invalid teacher assignment data.", 502);
+  }
+  const sectionName =
+    section && typeof section.name === "string" ? section.name : null;
+  return {
+    id: item.id,
+    staffId: item.staffId,
+    classId: item.classId,
+    sectionId,
+    subject,
+    isClassTeacher: item.isClassTeacher,
+    staffName,
+    className: item.class.name,
+    sectionName,
+  };
 }
 
 function parseCreatedClassroom(response: unknown): Classroom {
@@ -773,13 +1299,311 @@ function parseAttendanceReport(
 export class HttpSchoolService implements SchoolService {
   constructor(private readonly api: ApiClient) {}
 
-  async getTeacherDashboard(signal?: AbortSignal): Promise<TeacherDashboard> {
+  async getTeacherAcademicYears(
+    signal?: AbortSignal,
+  ): Promise<TeacherAcademicYear[]> {
+    return parseTeacherAcademicYears(
+      await this.api.request<unknown>("/teacher/academic-years", {}, signal),
+    );
+  }
+
+  async getTeacherDashboard(
+    academicYearId?: string,
+    signal?: AbortSignal,
+  ): Promise<TeacherDashboard> {
+    const query = academicYearId
+      ? `?academicYearId=${encodeURIComponent(academicYearId)}`
+      : "";
     const response = await this.api.request<unknown>(
-      "/dashboard/teacher",
+      `/dashboard/teacher${query}`,
       {},
       signal,
     );
     return parseTeacherDashboard(response);
+  }
+
+  async getTeacherSections(
+    academicYearId?: string,
+    signal?: AbortSignal,
+  ): Promise<TeacherSections> {
+    const query = academicYearId
+      ? `?academicYearId=${encodeURIComponent(academicYearId)}`
+      : "";
+    return parseTeacherSections(
+      await this.api.request<unknown>(`/teacher/sections${query}`, {}, signal),
+    );
+  }
+
+  async getTeacherAttendance(
+    academicYearId: string,
+    sectionId: string,
+    date: string,
+    signal?: AbortSignal,
+  ): Promise<TeacherAttendance> {
+    const query = new URLSearchParams({ academicYearId, sectionId, date });
+    return parseTeacherAttendance(
+      await this.api.request<unknown>(`/teacher/attendance?${query}`, {}, signal),
+    );
+  }
+
+  async saveTeacherAttendanceDraft(input: {
+    academicYearId: string;
+    sectionId: string;
+    date: string;
+    records: {
+      studentId: string;
+      status: TeacherAttendanceStatus;
+      remarks?: string;
+    }[];
+  }): Promise<{
+    sessionId: string;
+    sectionId: string;
+    date: string;
+    recordCount: number;
+    status: TeacherAttendanceSessionStatus;
+  }> {
+    const response = await this.api.request<unknown>(
+      "/teacher/attendance/draft",
+      {
+        method: "PUT",
+        body: JSON.stringify(input),
+      },
+    );
+    if (
+      !isRecord(response) ||
+      typeof response.sessionId !== "string" ||
+      typeof response.sectionId !== "string" ||
+      !isValidCalendarDate(response.date) ||
+      typeof response.recordCount !== "number" ||
+      !Number.isSafeInteger(response.recordCount) ||
+      response.recordCount < 1 ||
+      (response.status !== "DRAFT" && response.status !== "SUBMITTED")
+    ) {
+      throw new ApiError(
+        "The Dashify service returned invalid teacher attendance draft confirmation.",
+        502,
+      );
+    }
+    return {
+      sessionId: response.sessionId,
+      sectionId: response.sectionId,
+      date: response.date,
+      recordCount: response.recordCount,
+      status: response.status,
+    };
+  }
+
+  async submitTeacherAttendance(input: {
+    academicYearId: string;
+    sectionId: string;
+    date: string;
+  }) {
+    const response = await this.api.request<unknown>(
+      "/teacher/attendance/submit",
+      { method: "POST", body: JSON.stringify(input) },
+    );
+    if (
+      !isRecord(response) ||
+      typeof response.sessionId !== "string" ||
+      response.sectionId !== input.sectionId ||
+      response.date !== input.date ||
+      typeof response.recordCount !== "number" ||
+      !Number.isSafeInteger(response.recordCount) ||
+      response.recordCount < 1 ||
+      response.status !== "SUBMITTED"
+    ) {
+      throw new ApiError(
+        "The Dashify service returned invalid attendance submission confirmation.",
+        502,
+      );
+    }
+    return {
+      sessionId: response.sessionId,
+      sectionId: response.sectionId,
+      date: response.date,
+      recordCount: response.recordCount,
+      status: "SUBMITTED" as const,
+    };
+  }
+
+  async getTeacherAssessments(
+    academicYearId?: string,
+    sectionId?: string,
+    signal?: AbortSignal,
+  ): Promise<TeacherAssessment[]> {
+    const params = new URLSearchParams();
+    if (academicYearId) params.set("academicYearId", academicYearId);
+    if (sectionId) params.set("sectionId", sectionId);
+    const query = params.size ? `?${params}` : "";
+    return parseTeacherAssessments(
+      await this.api.request<unknown>(`/teacher/assessments${query}`, {}, signal),
+    );
+  }
+
+  async createTeacherAssessment(input: {
+    academicYearId: string;
+    sectionId: string;
+    type: TeacherAssessmentType;
+    title: string;
+    description?: string;
+    dueDate: string;
+    startTime?: string;
+    durationMinutes?: number;
+    maxScore: number;
+    passMark: number;
+  }): Promise<TeacherAssessment> {
+    return parseTeacherAssessment(
+      await this.api.request<unknown>("/teacher/assessments", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    );
+  }
+
+  async publishTeacherAssessment(id: string): Promise<TeacherAssessment> {
+    return parseTeacherAssessment(
+      await this.api.request<unknown>(
+        `/teacher/assessments/${encodeURIComponent(id)}/publish`,
+        { method: "POST" },
+      ),
+    );
+  }
+
+  async getTeacherResults(
+    assessmentId: string,
+    signal?: AbortSignal,
+  ): Promise<TeacherAssessmentResults> {
+    return parseTeacherResults(
+      await this.api.request<unknown>(
+        `/teacher/assessments/${encodeURIComponent(assessmentId)}/results`,
+        {},
+        signal,
+      ),
+    );
+  }
+
+  async saveTeacherResults(
+    assessmentId: string,
+    input: {
+      records: { studentId: string; score: number; feedback?: string }[];
+    },
+  ): Promise<{ assessmentId: string; savedCount: number }> {
+    const response = await this.api.request<unknown>(
+      `/teacher/assessments/${encodeURIComponent(assessmentId)}/results`,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+    if (
+      !isRecord(response) ||
+      typeof response.assessmentId !== "string" ||
+      typeof response.savedCount !== "number" ||
+      !Number.isSafeInteger(response.savedCount) ||
+      response.savedCount < 1
+    ) {
+      throw new ApiError("The Dashify service returned invalid result confirmation.", 502);
+    }
+    return {
+      assessmentId: response.assessmentId,
+      savedCount: response.savedCount,
+    };
+  }
+
+  async publishTeacherResults(assessmentId: string) {
+    const response = await this.api.request<unknown>(
+      `/teacher/assessments/${encodeURIComponent(assessmentId)}/results/publish`,
+      { method: "POST" },
+    );
+    if (
+      !isRecord(response) ||
+      response.assessmentId !== assessmentId ||
+      response.resultsStatus !== "PUBLISHED" ||
+      typeof response.publishedCount !== "number" ||
+      !Number.isSafeInteger(response.publishedCount) ||
+      response.publishedCount < 1
+    ) {
+      throw new ApiError("The Dashify service returned invalid publish confirmation.", 502);
+    }
+    return {
+      assessmentId,
+      resultsStatus: "PUBLISHED" as const,
+      publishedCount: response.publishedCount,
+    };
+  }
+
+  async getGradeScale(
+    academicYearId: string,
+    signal?: AbortSignal,
+  ): Promise<TeacherGradeScale> {
+    return parseTeacherGradeScale(
+      await this.api.request<unknown>(
+        `/academic-years/${encodeURIComponent(academicYearId)}/grade-scale`,
+        {},
+        signal,
+      ),
+    );
+  }
+
+  async saveGradeScale(academicYearId: string, bands: TeacherGradeBand[]) {
+    return parseTeacherGradeScale(
+      await this.api.request<unknown>(
+        `/academic-years/${encodeURIComponent(academicYearId)}/grade-scale`,
+        { method: "PUT", body: JSON.stringify({ bands }) },
+      ),
+    );
+  }
+
+  async getNotifications(signal?: AbortSignal): Promise<TeacherNotifications> {
+    return parseTeacherNotifications(
+      await this.api.request<unknown>("/notifications", {}, signal),
+    );
+  }
+
+  async markNotificationRead(id: string): Promise<void> {
+    const response = await this.api.request<unknown>(
+      `/notifications/${encodeURIComponent(id)}/read`,
+      { method: "PATCH" },
+    );
+    if (!isRecord(response) || response.success !== true) {
+      throw new ApiError("The Dashify service did not confirm the notification update.", 502);
+    }
+  }
+
+  async markAllNotificationsRead(): Promise<number> {
+    const response = await this.api.request<unknown>("/notifications/read-all", {
+      method: "PATCH",
+    });
+    if (
+      !isRecord(response) ||
+      response.success !== true ||
+      typeof response.updatedCount !== "number" ||
+      !Number.isSafeInteger(response.updatedCount) ||
+      response.updatedCount < 0
+    ) {
+      throw new ApiError("The Dashify service did not confirm notification updates.", 502);
+    }
+    return response.updatedCount;
+  }
+
+  async getTeacherAssignments(
+    signal?: AbortSignal,
+  ): Promise<TeacherAssignment[]> {
+    const response = await this.api.request<unknown>(
+      "/staff/teacher-assignments",
+      {},
+      signal,
+    );
+    if (!Array.isArray(response)) {
+      throw new ApiError("The Dashify service returned invalid teacher assignments.", 502);
+    }
+    return response.map(parseTeacherAssignment);
+  }
+
+  async assignTeacher(input: AssignTeacherInput): Promise<TeacherAssignment> {
+    return parseTeacherAssignment(
+      await this.api.request<unknown>("/staff/teacher-assignments", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    );
   }
 
   async getOverview(role: SchoolRole, signal?: AbortSignal): Promise<SchoolOverview> {

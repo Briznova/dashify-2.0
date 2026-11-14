@@ -83,7 +83,10 @@ paths:
         section assignments cover only their assigned section. The localDate
         comes from the active school's timezone. A section without a session
         has null sessionStatus and unmarkedCount. Student identifiers are never
-        returned.
+        returned. studentCount is the count of active students enrolled on
+        localDate; academicYearName is the most recently started ACTIVE school
+        year, or null when none exists. A DRAFT status indicates a Teacher
+        attendance draft and remains unpublished.
       security:
         - accessCookie: []
       responses:
@@ -188,7 +191,12 @@ components:
     TeacherDashboard:
       type: object
       additionalProperties: false
-      required: [schoolId, schoolName, localDate, assignments]
+      required:
+        - schoolId
+        - schoolName
+        - localDate
+        - academicYearName
+        - assignments
       properties:
         schoolId:
           type: string
@@ -199,6 +207,10 @@ components:
           type: string
           format: date
           description: Current calendar date in the active school's timezone.
+        academicYearName:
+          type: string
+          nullable: true
+          description: The most recently started ACTIVE school academic year, if one exists.
         assignments:
           type: array
           items:
@@ -212,6 +224,7 @@ components:
         - sectionId
         - sectionName
         - subject
+        - studentCount
         - sessionStatus
         - unmarkedCount
       properties:
@@ -228,9 +241,13 @@ components:
         subject:
           type: string
           nullable: true
+        studentCount:
+          type: integer
+          minimum: 0
+          description: Active students enrolled in the assigned section on localDate.
         sessionStatus:
           type: string
-          enum: [OPEN, CLOSED]
+          enum: [DRAFT, OPEN, CLOSED]
           nullable: true
           description: Null when no attendance session exists on localDate.
         unmarkedCount:

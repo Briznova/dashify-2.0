@@ -4,15 +4,16 @@ import type { Metadata } from "next";
 import { AuthFlow } from "@/components/auth-flow";
 
 export const metadata: Metadata = { title: "Sign in" };
+export const instant = false;
 
-const seededAccountVariables = [
+const localAccountVariables = [
   {
-    role: "School admin (seeded)",
-    emailKey: "SEED_ADMIN_EMAIL",
-    passwordKey: "SEED_ADMIN_PASSWORD",
+    role: "School Admin (local)",
+    emailKey: "SCHOOL_ADMIN_EMAIL",
+    passwordKey: "SCHOOL_ADMIN_DEFAULT_PASSWORD",
   },
   {
-    role: "Platform admin (seeded)",
+    role: "Super Admin (local)",
     emailKey: "SEED_PLATFORM_ADMIN_EMAIL",
     passwordKey: "SEED_PLATFORM_ADMIN_PASSWORD",
   },
@@ -26,7 +27,7 @@ const seededAccountVariables = [
 function parseEnvFile(contents: string): Map<string, string> {
   const values = new Map<string, string>();
   const requiredKeys = new Set<string>(
-    seededAccountVariables.flatMap(({ emailKey, passwordKey }) => [
+    localAccountVariables.flatMap(({ emailKey, passwordKey }) => [
       emailKey,
       passwordKey,
     ]),
@@ -60,7 +61,7 @@ function isMissingFileError(error: unknown): boolean {
     error.code === "ENOENT";
 }
 
-async function getDevSeededAccounts() {
+async function getDevLoginAccounts() {
   if (
     process.env.NODE_ENV !== "development" ||
     process.env.NEXT_PUBLIC_DASHIFY_API_MODE !== "api"
@@ -86,7 +87,7 @@ async function getDevSeededAccounts() {
   if (!contents) return [];
 
   const values = parseEnvFile(contents);
-  return seededAccountVariables.flatMap(({ role, emailKey, passwordKey }) => {
+  return localAccountVariables.flatMap(({ role, emailKey, passwordKey }) => {
     const email = values.get(emailKey);
     const password = values.get(passwordKey);
     return email && password ? [{ role, email, password }] : [];
@@ -94,6 +95,6 @@ async function getDevSeededAccounts() {
 }
 
 export default async function SignInPage() {
-  const devSeededAccounts = await getDevSeededAccounts();
-  return <AuthFlow mode="sign-in" devSeededAccounts={devSeededAccounts} />;
+  const devLoginAccounts = await getDevLoginAccounts();
+  return <AuthFlow mode="sign-in" devLoginAccounts={devLoginAccounts} />;
 }

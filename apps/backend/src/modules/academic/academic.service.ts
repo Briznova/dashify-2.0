@@ -7,12 +7,97 @@ import { CreateClassWithSectionDto } from './dto/create-class-with-section.dto';
 import { CreateSectionDto } from './dto/create-section.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 import { UpdateSectionDto } from './dto/update-section.dto';
+import { SaveGradeScaleDto } from './dto/save-grade-scale.dto';
 
 @Injectable()
 export class AcademicService {
   constructor(private readonly prisma: PrismaService) {}
   async listYears(schoolId: string) {
     return this.prisma.withTenant(schoolId, (tx) => tx.academicYear.findMany({ where: { schoolId }, orderBy: { startDate: 'desc' } }));
+  }
+  async getGradeScale(schoolId: string, academicYearId: string) {
+    return this.prisma.withTenant(schoolId, async (tx) => {
+      const year = await tx.academicYear.findFirst({
+        where: { id: academicYearId, schoolId },
+        select: { id: true, name: true },
+      });
+      if (!year) throw new NotFoundException('Academic year not found');
+      const scale = await tx.gradeScale.findFirst({
+        where: { schoolId, academicYearId },
+        include: { bands: { orderBy: { minPercent: 'asc' } } },
+      });
+      return {
+        academicYearId: year.id,
+        academicYearName: year.name,
+        bands: scale?.bands ?? [],
+      };
+    });
+  }
+  async saveGradeScale(
+    schoolId: string,
+    actorId: string,
+    academicYearId: string,
+    dto: SaveGradeScaleDto,
+  ) {
+    const bands = dto.bands
+      .map((band) => ({
+        label: band.label.trim(),
+        minPercent: band.minPercent,
+        maxPercent: band.maxPercent,
+      }))
+      .sort((left, right) => left.minPercent - right.minPercent);
+    const labels = bands.map((band) => band.label.toLocaleLowerCase());
+    if (new Set(labels).size !== labels.length) {
+      throw new BadRequestException('Grade labels must be unique');
+    }
+    let nextMin = 0;
+    for (const band of bands) {
+      if (!band.label || band.minPercent !== nextMin || band.maxPercent < band.minPercent) {
+        throw new BadRequestException('Grade bands must cover 0-100 without gaps or overlaps');
+      }
+      nextMin = band.maxPercent + 1;
+    }
+    if (nextMin !== 101) {
+      throw new BadRequestException('Grade bands must cover 0-100 without gaps or overlaps');
+    }
+
+    return this.prisma.withTenant(schoolId, async (tx) => {
+      const year = await tx.academicYear.findFirst({
+        where: { id: academicYearId, schoolId },
+        select: { id: true, name: true },
+      });
+      if (!year) throw new NotFoundException('Academic year not found');
+      const scale = await tx.gradeScale.upsert({
+        where: { academicYearId },
+        create: {
+          schoolId,
+          academicYearId,
+          bands: { create: bands },
+        },
+        update: {
+          bands: {
+            deleteMany: {},
+            create: bands,
+          },
+        },
+        include: { bands: { orderBy: { minPercent: 'asc' } } },
+      });
+      await tx.auditLog.create({
+        data: {
+          schoolId,
+          actorUserId: actorId,
+          action: 'GRADE_SCALE_UPDATED',
+          resource: 'grade_scale',
+          resourceId: scale.id,
+          summary: { academicYearId, bandCount: bands.length },
+        },
+      });
+      return {
+        academicYearId: year.id,
+        academicYearName: year.name,
+        bands: scale.bands,
+      };
+    });
   }
   async createYear(schoolId: string, dto: CreateAcademicYearDto) {
     const start = new Date(dto.startDate); const end = new Date(dto.endDate);

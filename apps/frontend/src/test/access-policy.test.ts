@@ -80,12 +80,11 @@ const expected: Record<
     kind: "portal",
     dataScope: "assigned-classes",
     navigation: [
-      "Overview",
-      "My teaching day",
-      "Classes",
+      "Home",
       "Attendance",
-      "Academics",
-      "Announcements",
+      "Results",
+      "Assignments / Exam",
+      "School notices",
     ],
     settings: false,
   },
@@ -135,7 +134,9 @@ describe("role access policy", () => {
 
   it.each([
     ["teacher", "/dashboard/teacher"],
-    ["teacher", "/dashboard/academics/assignments"],
+    ["teacher", "/dashboard/teacher/attendance"],
+    ["teacher", "/dashboard/teacher/results"],
+    ["teacher", "/dashboard/teacher/assessments"],
     ["accountant", "/dashboard/fees/invoices"],
     ["parent", "/dashboard/parent/attendance"],
     ["student", "/dashboard/student/assignments"],
@@ -170,10 +171,9 @@ describe("role access policy", () => {
     },
   );
 
-  it.each([
-    ["school_admin", "/dashboard/customers"],
-    ["teacher", "/dashboard/projects"],
-  ] as const)("preserves the %s compatibility alias %s", (role, path) => {
+  it("preserves the school-admin compatibility alias", () => {
+    const role = "school_admin";
+    const path = "/dashboard/customers";
     expect(isDashboardRouteAllowed(path, role)).toBe(true);
   });
 
@@ -263,12 +263,21 @@ describe("role access policy", () => {
     ).toBe(true);
   });
 
-  it("keeps attendance available to principal and teacher, and reports to school admin", () => {
+  it("keeps principal attendance and Teacher attendance on their separate permissions", () => {
     const permissions = ["attendance.read", "school.read", "reports.read"];
-    for (const role of ["principal", "teacher"] as const) {
-      expect(getRoleNavigation(role, permissions).map((item) => item.capability)).toContain("attendance");
-      expect(isDashboardRouteAllowed("/dashboard/attendance", role, permissions)).toBe(true);
-    }
+    expect(
+      getRoleNavigation("principal", permissions).map((item) => item.capability),
+    ).toContain("attendance");
+    expect(isDashboardRouteAllowed("/dashboard/attendance", "principal", permissions)).toBe(true);
+    expect(isDashboardRouteAllowed("/dashboard/attendance", "teacher", permissions)).toBe(false);
+    expect(isDashboardRouteAllowed("/dashboard/teacher/attendance", "teacher", permissions)).toBe(false);
+    expect(
+      isDashboardRouteAllowed(
+        "/dashboard/teacher/attendance",
+        "teacher",
+        [...permissions, "teacher.attendance.read"],
+      ),
+    ).toBe(true);
     expect(isDashboardRouteAllowed("/dashboard/attendance/nested", "school_admin", permissions)).toBe(false);
     expect(isDashboardRouteAllowed("/dashboard/reports", "school_admin", permissions)).toBe(true);
   });
@@ -321,7 +330,7 @@ describe("role access policy", () => {
   it("keeps the assigned workspace home reachable when its aggregate API is unavailable", () => {
     expect(
       getRoleNavigation("teacher", []).map((item) => item.capability),
-    ).toEqual(["overview"]);
+    ).toEqual([]);
     expect(isDashboardRouteAllowed("/dashboard/teacher", "teacher", [])).toBe(
       true,
     );
@@ -339,6 +348,20 @@ describe("role access policy", () => {
         (item) => item.capability,
       ),
     ).toContain("teaching-day");
+  });
+
+  it("shows all Teacher screens when their required permissions are granted", () => {
+    const permissions = [
+      "dashboard.teacher.read",
+      "teacher.attendance.read",
+      "teacher.results.read",
+      "teacher.assessments.read",
+      "announcements.read",
+    ];
+
+    expect(
+      getRoleNavigation("teacher", permissions).map((item) => item.label),
+    ).toEqual(expected.teacher.navigation);
   });
 
   it("exposes reports in API mode only when reports.read is granted", () => {
@@ -398,5 +421,26 @@ describe("role access policy", () => {
     expect(
       isDashboardRouteAllowed("/dashboard/students/new", "school_admin"),
     ).toBe(true);
+  });
+
+  it("gates Teacher feature routes by their dedicated API permissions", () => {
+    const permissionKeys = ["dashboard.teacher.read", "teacher.attendance.read"];
+    expect(
+      isDashboardRouteAllowed(
+        "/dashboard/teacher/attendance",
+        "teacher",
+        permissionKeys,
+      ),
+    ).toBe(true);
+    expect(
+      isDashboardRouteAllowed(
+        "/dashboard/teacher/results",
+        "teacher",
+        permissionKeys,
+      ),
+    ).toBe(false);
+    expect(
+      getRoleNavigation("teacher", permissionKeys).map((item) => item.label),
+    ).toEqual(["Home", "Attendance"]);
   });
 });

@@ -1,14 +1,9 @@
 import type { Metadata } from "next";
-import { PortalDashboard } from "@/components/school-extras";
 import { TeacherDashboardView } from "@/components/teacher-dashboard";
-import { isApiMode } from "@/services";
 
-export const metadata: Metadata = { title: "Teacher portal" };
+export const metadata: Metadata = { title: "Teacher workspace" };
+export const instant = false;
 
 export default function TeacherPortalPage() {
-  return isApiMode ? (
-    <TeacherDashboardView />
-  ) : (
-    <PortalDashboard role="teacher" />
-  );
+  return <TeacherDashboardView />;
 }

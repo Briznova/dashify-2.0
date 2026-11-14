@@ -11,6 +11,7 @@ import { CreateClassWithSectionDto } from "./dto/create-class-with-section.dto";
 import { CreateSectionDto } from "./dto/create-section.dto";
 import { UpdateClassDto } from "./dto/update-class.dto";
 import { UpdateSectionDto } from "./dto/update-section.dto";
+import { SaveGradeScaleDto } from "./dto/save-grade-scale.dto";
 
 @ApiTags("academic-structure")
 @ApiCookieAuth("accessCookie")
@@ -29,6 +30,35 @@ export class AcademicController {
   @ApiOperation({ summary: "List academic years for the active school" })
   years(@Req() req: AuthenticatedRequest) {
     return this.academic.listYears(this.school(req));
+  }
+
+  @Get("academic-years/:id/grade-scale")
+  @RequirePermissions("academic_structure.read")
+  @ApiOperation({ summary: "Read a grading scale for an academic year" })
+  gradeScale(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) yearId: string,
+  ) {
+    return this.academic.getGradeScale(this.school(req), yearId);
+  }
+
+  @Put("academic-years/:id/grade-scale")
+  @RequirePermissions("academic_structure.manage")
+  @ApiHeader({ name: "Origin", required: true })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiOperation({ summary: "Create or replace an academic year's grading scale" })
+  @ApiBody({ type: SaveGradeScaleDto })
+  saveGradeScale(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) yearId: string,
+    @Body() dto: SaveGradeScaleDto,
+  ) {
+    return this.academic.saveGradeScale(
+      this.school(req),
+      req.user.id,
+      yearId,
+      dto,
+    );
   }
 
   @Post("academic-years")

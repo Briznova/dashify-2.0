@@ -138,7 +138,7 @@ Phase 3 implementation evidence (2026-11-12): 54 frontend tests, lint, TypeScrip
 
 ## Phase 5 — Prioritize and implement remaining capabilities
 
-**Status:** In progress — delivered staff/teacher assignment, student editing, class/section creation, School Admin/Principal/Teacher dashboards, attendance reporting, announcements, and the read-only platform directory; other Phase 5 areas still require feature-level decisions
+**Status:** In progress — delivered staff/teacher assignment, student editing, class/section creation, School Admin/Principal/Teacher dashboards, the full Teacher workspace and draft-only attendance/results/class notices, attendance reporting, announcements, and the read-only platform directory; the Teacher lifecycle migrations are applied to the confirmed local database; other Phase 5 areas still require feature-level decisions
 **Reference:** [Backend capability backlog](./05-backend-capability-backlog.md)
 
 - [x] Product approves the Super Admin frontend design previews and integration with existing platform APIs (2026-11-13); unsupported operations remain dummy and separately gated. See [Super Admin workspace LLD](./08-super-admin-workspace-lld.md).
@@ -197,6 +197,7 @@ Phase 3 implementation evidence (2026-11-12): 54 frontend tests, lint, TypeScrip
 - [x] User delegates a pragmatic next report scope; select a per-day breakdown in the existing closed-session school-admin report with no entity-level detail.
 - [x] Implement per-day attendance aggregates that reconcile with report totals and include them in the CSV.
 - [x] Implement the conservative school-wide in-app announcement slice: School Admin draft/publish, active-school published list for School Admin/Principal/Teacher, permission grants, audit events, and API-mode UI; defer read receipts, audience targeting, and outbound delivery.
+- [x] Implement the approved Teacher workflow: assignment-scoped attendance, assessment draft/publish, editable results, Teacher notices, API contracts, and workspace UI; keep Parent screens out of scope.
 - [x] Implement a dedicated platform grant and platform-only session; do not infer platform authority from school roles or issue platform sessions to accounts with active school memberships.
 - [x] Add the audited, read-only platform school directory with only approved school metadata; deny school switching, membership listing, and school-record access from platform sessions.
 - [x] Connect Super Admin API-mode navigation and directory UI to `platform.schools.read`; retain server authorization as authoritative.
@@ -255,6 +256,8 @@ Phase 5 platform administration scope decision: The request for a Super Admin wi
 | 2026-11-12 | Phase 5 — School attendance report | Added the tenant-scoped closed-session attendance aggregate endpoint and API-mode date-range report UI. Backend: 10 focused tests including attendance regression, typecheck, build, and report-file formatting passed; frontend: 57 focused tests, targeted ESLint, typecheck, and production build passed. No live API/database integration was run. | Copilot |
 | 2026-11-12 | Phase 5 — Attendance CSV export | Added an on-demand frontend CSV download of the aggregate report; no server-generated file or retained export. Frontend: 7 focused tests, targeted ESLint, TypeScript check, production build, and `git diff --check` passed. No live API/database integration was run. | Copilot |
 | 2026-11-12 | Phase 5 — Daily attendance breakdown | Added chronological per-day counts within the same tenant-scoped closed-session report; CSV includes the daily rows. Backend: 6 focused tests, typecheck, build, Prettier check, and read-only SQL smoke test passed; frontend: 10 focused tests, targeted ESLint, typecheck, and production build passed. No schema migration was needed. | Copilot |
+| 2026-11-14 | Phase 5 — Teacher workspace | Added teacher-scoped section, attendance, assessment, publish, and result APIs with Prisma schema/migration, permission rollout, and API/implementation documentation. Backend: 15 focused tests, typecheck, build, and Prisma validation passed. Frontend: 227 tests, typecheck, targeted ESLint, and production build passed. Migration is prepared but not applied; no live database/API integration was run. | Copilot |
+| 2026-11-14 | Phase 5 — Teacher draft workflows | Added editable partial attendance drafts with remarks, scheduled tests, numeric result drafts with optional feedback, and section-targeted class notice drafts; Parent/family access remains deferred. Applied both lifecycle migrations to the confirmed local `dashify` database; Prisma reports all 23 migrations applied and a read-only query confirms the Teacher notice permission grant. Backend: 30 suites / 186 tests, typecheck, and build passed. Frontend: 40 files / 233 tests, typecheck, targeted ESLint, and production build passed. Backend ESLint could not run because this repository has no ESLint 9 flat config. | Copilot |
 
 ## Blockers / decisions needed
 

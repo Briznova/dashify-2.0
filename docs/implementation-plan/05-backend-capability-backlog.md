@@ -10,7 +10,7 @@
 | B0-1 | Tenant RLS absent/incomplete | Backend implementation plan says policies and least-privilege app role remain; security doc says production is blocked | Complete policies and two-school isolation tests before production |
 | B0-2 | Auth refresh rotation incomplete | Refresh token hashes exist; implementation plan lists rotation pending; no refresh route observed | Approve auth spec, implement rotation/replay handling |
 | B0-3 | Auth frontend contract mismatch | Backend uses Bearer JWT/login/me/logout; frontend expects cookie session/sign-in/sign-out | Resolve auth/session decision before protected frontend API integration |
-| B0-4 | Permission matrix incomplete | School Admin has the school-management baseline; Principal and Teacher have explicit dashboard and announcement-read grants. Accountant, Parent, Student, and platform-wide grants remain incomplete, and school onboarding/platform administration are not implemented. Frontend permission filtering is presentation-only. | Define remaining role grants and object scopes, then test endpoint and object-level authorization before enabling further API-mode capabilities |
+| B0-4 | Permission matrix incomplete | School Admin has the school-management baseline; Principal and Teacher have explicit dashboard and announcement-read grants. Teacher workspace permissions are now dedicated and assignment-scoped. Accountant, Parent, Student, and platform-wide grants remain incomplete, and school onboarding/platform administration are not implemented. Frontend permission filtering is presentation-only. | Define remaining role grants and object scopes, then test endpoint and object-level authorization before enabling further API-mode capabilities |
 | B0-5 | API prefix/config mismatch | Backend defaults `api/v1`, port 3000, CORS origin 5173; frontend docs show 3001 and its adapter paths omit prefix | Standardize local and deployed config |
 
 ## Core functional gaps
@@ -24,7 +24,7 @@
 | Staff | School-scoped profile create/update/deactivate, existing-account Teacher linkage, teacher assignments, permissions, frontend integration | Invitation/credential setup and non-Teacher role grants |
 | Attendance | Session read/create/mark/close; closed-session daily reports and client-generated aggregate CSV | Corrections with reason and any additional report types |
 | Finance | Schema work planned | Blocked until finance decisions in backend planning are approved; no financial APIs should be fabricated |
-| Academic workflows | Schema/domain foundations exist | Assignment lifecycle, submissions/grading, grade/report workflows and role-scoped access |
+| Academic workflows | Teacher-created assignments/exams with one-way publish and Teacher-only score entry/update are implemented with assignment and enrollment-date checks | Student submissions, attachments, notifications, grading scales, and student/parent result publication |
 | Dashboards | School-admin `GET /api/v1/dashboard` returns active student/staff/class/section counts; Principal `GET /api/v1/dashboard/principal` returns school-local daily attendance totals. Each has a separate permission and active-school scoping. | Teacher, parent, and platform aggregates; finance metrics; performance and cache/refresh semantics remain gated |
 | Reports | School-admin `GET /api/v1/reports/attendance` returns closed-session summary and per-day counts for an inclusive date range; the frontend can download those aggregates as CSV | Other report types, PDF/server-generated exports, student-level detail, and performance reports remain gated |
 | Communications | School-wide in-app announcement list, management list, draft creation, and publish APIs; School Admin manages and School Admin/Principal/Teacher can read | Notifications, read receipts, audience targeting, attachments, delivery channels, and user preferences |
@@ -51,7 +51,7 @@
 ### P2 — Role workspaces and reporting
 
 - Backend dashboard aggregates per selected role/workspace; School Admin current counts, the Principal daily attendance snapshot, and the Teacher assigned-class attendance snapshot are implemented and documented in the [dashboard contract](../api-contracts/dashboard.openapi.yaml). Principal and Teacher membership assignment is not included.
-- Remaining report types/exports and academic assignment/submission workflows.
+- Remaining report types/exports and academic assignment submission/grading workflows.
 - Parent/student-specific linked-record APIs with object-level authorization.
 - Notifications and broader announcement features; the school-wide in-app first slice is implemented.
 
