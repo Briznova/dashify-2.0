@@ -52,6 +52,11 @@ Settings remain available to Super Admin, School Admin, and Principal. The
 `/dashboard/customers` → students and `/dashboard/projects` → classes aliases are
 preserved.
 
+The School Admin Attendance page was removed from workspace navigation and
+route UX at product request. This does not revoke backend
+attendance permissions or remove attendance reports; other workspace policies
+are unchanged. The table above records the earlier baseline.
+
 ## Provisional least-privilege role policy
 
 At the user's request to make the decision, use this conservative product policy.

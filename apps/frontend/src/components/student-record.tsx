@@ -18,6 +18,7 @@ import { Panel } from "@/components/ui/panel";
 import { ResourceState } from "@/components/ui/resource-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { isApiMode } from "@/services";
+import { StudentAdmissionForm } from "@/components/student-admission-form";
 import styles from "./student-record.module.css";
 
 const emptyStudent: StudentInput = {
@@ -59,7 +60,7 @@ export function StudentProfile({ studentId }: { studentId: string }) {
       <PageHeading
         eyebrow="STUDENT DIRECTORY"
         title={student?.name ?? "Student profile"}
-        description="A complete view of a student’s school journey and key information."
+        description={isApiMode ? "Student identity, guardian contacts, and available placement information." : "A complete view of a student’s school journey and key information."}
       >
         {student && !isApiMode && (
           <Link className={styles.primaryLink} href={`/dashboard/students/${student.id}/edit`}>
@@ -104,12 +105,15 @@ export function StudentProfile({ studentId }: { studentId: string }) {
                 <dl className={styles.detailList}>
                   <div><dt>Student name</dt><dd>{student.name}</dd></div>
                   <div><dt>Student ID</dt><dd>{student.studentNumber}</dd></div>
-                  <div><dt>Class & section</dt><dd>{[student.className ?? student.grade, student.sectionName].filter(Boolean).join(" · ") || "—"}</dd></div>
-                  {student.academicYearName && <div><dt>Academic year</dt><dd>{student.academicYearName}</dd></div>}
+                  <div><dt>Class & section</dt><dd>{isApiMode ? [student.className, student.sectionName].filter(Boolean).join(" · ") || "Unavailable" : [student.className ?? student.grade, student.sectionName].filter(Boolean).join(" · ") || "—"}</dd></div>
+                  {(isApiMode || student.academicYearName) && <div><dt>Academic year</dt><dd>{student.academicYearName ?? "Unavailable"}</dd></div>}
+                  {student.rollNumber && <div><dt>Roll number</dt><dd>{student.rollNumber}</dd></div>}
                   {student.dateOfBirth && <div><dt>Date of birth</dt><dd>{student.dateOfBirth.slice(0, 10)}</dd></div>}
                   <div><dt>Admission date</dt><dd>{student.admissionDate?.slice(0, 10) ?? "—"}</dd></div>
                   <div><dt>Record status</dt><dd><StatusBadge>{student.status}</StatusBadge></dd></div>
+                  {student.address && <div><dt>Address</dt><dd>{[student.address.line1, student.address.city, student.address.state, student.address.postalCode].filter(Boolean).join(", ") || "Not provided"}</dd></div>}
                 </dl>
+                {isApiMode && <p className={styles.empty}>Placement is shown only when exactly one enrolment is marked active. Dates are not considered.</p>}
               </Panel>
               <Panel title="Parent / guardian" description="Primary family contact for this student.">
                 {(student.guardians?.length ?? 0) > 0
@@ -122,9 +126,20 @@ export function StudentProfile({ studentId }: { studentId: string }) {
                   : student.guardian
                     ? <div className={styles.guardianCard}><span className={styles.guardianAvatar}>{initials(student.guardian)}</span><div><strong>{student.guardian}</strong><p>Primary guardian</p></div></div>
                     : <p className={styles.empty}>No guardian details are on file.</p>}
+                {student.emergencyContact && (
+                  <div className={styles.guardianCard}>
+                    <div><strong>Emergency contact</strong><p>{student.emergencyContact.kind === "OTHER"
+                      ? `${student.emergencyContact.name} · ${student.emergencyContact.phone}`
+                      : (() => {
+                          const primary = student.guardians?.find((guardian) => guardian.isPrimary);
+                          return primary ? `${primary.name} · ${primary.phone} (primary guardian)` : "Primary guardian unavailable";
+                        })()}</p></div>
+                  </div>
+                )}
               </Panel>
             </div>
           )}
+          {isApiMode && <p className={styles.unavailable}>Academic records, attendance, fees, and documents are not available in this profile yet.</p>}
           {activeTab === "academics" && (
             <Panel title="Academic history" description="Recent coursework and learning progress.">
               <div className={styles.recordList}>
@@ -170,6 +185,13 @@ export function StudentProfile({ studentId }: { studentId: string }) {
 }
 
 export function StudentForm({ studentId }: { studentId?: string }) {
+  if (isApiMode && !studentId) {
+    return <StudentAdmissionForm />;
+  }
+  return <LegacyStudentForm studentId={studentId} />;
+}
+
+function LegacyStudentForm({ studentId }: { studentId?: string }) {
   const router = useRouter();
   const studentResource = useStudent(studentId ?? "");
   const mutation = useSaveStudent();

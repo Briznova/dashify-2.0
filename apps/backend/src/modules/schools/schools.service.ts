@@ -21,6 +21,29 @@ export class SchoolsService {
     });
   }
 
+  async getAdmissionSettings(schoolId: string) {
+    return this.prisma.withTenant(schoolId, async (tx) => {
+      const school = await tx.school.findFirst({ where: { id: schoolId, isActive: true }, select: { code: true, admissionPrefix: true } });
+      if (!school) throw new NotFoundException();
+      return { prefix: school.admissionPrefix ?? school.code };
+    });
+  }
+
+  async updateAdmissionSettings(schoolId: string, actorUserId: string, prefix: string) {
+    return this.prisma.withTenant(schoolId, async (tx) => {
+      const schools = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM schools WHERE id = ${schoolId}::uuid AND is_active = true FOR UPDATE
+      `;
+      if (!schools.length) throw new NotFoundException();
+      await tx.school.update({ where: { id: schoolId }, data: { admissionPrefix: prefix } });
+      await tx.auditLog.create({ data: {
+        schoolId, actorUserId, action: 'ADMISSION_PREFIX_UPDATED',
+        resource: 'school', resourceId: schoolId,
+      } });
+      return { prefix };
+    });
+  }
+
   private async onboardingSnapshot(tx: Prisma.TransactionClient, schoolId: string) {
     const [state, academicYears, activeClass] = await Promise.all([
       tx.schoolOnboardingState.findUnique({ where: { schoolId }, select: { status: true } }),

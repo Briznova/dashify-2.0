@@ -1,4 +1,8 @@
-import { ForbiddenException, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { AuthScope } from "@prisma/client";
@@ -8,6 +12,7 @@ import * as argon2 from "argon2";
 
 jest.mock("argon2", () => ({
   verify: jest.fn(),
+  hash: jest.fn(),
 }));
 
 describe("AuthService browser sessions", () => {
@@ -46,7 +51,8 @@ describe("AuthService browser sessions", () => {
   };
 
   let prismaMock: {
-    user: { findUnique: jest.Mock };
+    user: { findUnique: jest.Mock; update: jest.Mock };
+    auditLog: { create: jest.Mock };
     platformAdminGrant: { findFirst: jest.Mock };
     schoolMembership: {
       findMany: jest.Mock;
@@ -59,12 +65,14 @@ describe("AuthService browser sessions", () => {
       updateMany: jest.Mock;
     };
     $transaction: jest.Mock;
+    $queryRaw: jest.Mock;
   };
   let auth: AuthService;
 
   beforeEach(() => {
     prismaMock = {
-      user: { findUnique: jest.fn() },
+      user: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
       platformAdminGrant: { findFirst: jest.fn().mockResolvedValue(null) },
       schoolMembership: {
         findMany: jest.fn().mockResolvedValue([membership]),
@@ -77,7 +85,12 @@ describe("AuthService browser sessions", () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       $transaction: jest.fn(),
+      $queryRaw: jest.fn().mockResolvedValue([{ id: "refresh-1" }]),
     };
+    prismaMock.$transaction.mockImplementation(
+      async (callback: (client: typeof prismaMock) => Promise<unknown>) =>
+        callback(prismaMock),
+    );
     const jwt = {
       signAsync: jest.fn().mockResolvedValue("signed-access-cookie"),
     };
@@ -91,6 +104,7 @@ describe("AuthService browser sessions", () => {
       config as unknown as ConfigService,
     );
     jest.mocked(argon2.verify).mockResolvedValue(true);
+    jest.mocked(argon2.hash).mockResolvedValue("new-hash");
   });
 
   it("creates a browser session without returning credentials in JSON", async () => {
@@ -143,6 +157,87 @@ describe("AuthService browser sessions", () => {
     expect(prismaMock.refreshToken.create).not.toHaveBeenCalled();
   });
 
+  it("does not create a login session if the password changed after verification", async () => {
+    prismaMock.user.findUnique
+      .mockResolvedValueOnce(user)
+      .mockResolvedValueOnce({ ...user, passwordHash: "changed-hash" });
+
+    await expect(
+      auth.login({ email: user.email, password: "example-password" }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prismaMock.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it("changes the password and revokes other and legacy sessions, but not the current session", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(user);
+    const input = {
+      currentPassword: "synthetic-old-password",
+      newPassword: "synthetic-new-password",
+    };
+
+    await auth.changePassword(user.id, "session-1", input);
+
+    expect(prismaMock.user.update).toHaveBeenCalledWith({
+      where: { id: user.id },
+      data: { passwordHash: "new-hash" },
+    });
+    expect(prismaMock.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: user.id,
+        revokedAt: null,
+        OR: [{ sessionId: { not: "session-1" } }, { sessionId: null }],
+      },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        actorUserId: user.id,
+        action: "PASSWORD_CHANGED",
+        resource: "user",
+        resourceId: user.id,
+      },
+    });
+    expect(JSON.stringify(prismaMock.auditLog.create.mock.calls)).not.toContain(
+      input.currentPassword,
+    );
+    expect(JSON.stringify(prismaMock.auditLog.create.mock.calls)).not.toContain(
+      input.newPassword,
+    );
+  });
+
+  it("rejects an incorrect current password without updating or revoking sessions", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(user);
+    jest.mocked(argon2.verify).mockResolvedValue(false);
+    await expect(
+      auth.changePassword(user.id, "session-1", {
+        currentPassword: "wrong-synthetic-password",
+        newPassword: "synthetic-new-password",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+    expect(prismaMock.refreshToken.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        actorUserId: user.id,
+        action: "PASSWORD_CHANGE_FAILED",
+        resource: "user",
+        resourceId: user.id,
+      },
+    });
+  });
+
+  it("rejects password changes if the current session has been revoked", async () => {
+    prismaMock.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    prismaMock.user.findUnique.mockResolvedValue(user);
+    await expect(
+      auth.changePassword(user.id, "session-1", {
+        currentPassword: "synthetic-old-password",
+        newPassword: "synthetic-new-password",
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+
   it("does not infer platform scope for users without an active school membership", async () => {
     prismaMock.user.findUnique.mockResolvedValue(user);
     prismaMock.schoolMembership.findMany.mockResolvedValue([]);
@@ -155,7 +250,9 @@ describe("AuthService browser sessions", () => {
 
   it("creates a dedicated platform session with no school memberships", async () => {
     prismaMock.user.findUnique.mockResolvedValue(user);
-    prismaMock.platformAdminGrant.findFirst.mockResolvedValue({ id: "grant-1" });
+    prismaMock.platformAdminGrant.findFirst.mockResolvedValue({
+      id: "grant-1",
+    });
 
     const result = await auth.login({
       email: user.email,
@@ -178,7 +275,9 @@ describe("AuthService browser sessions", () => {
 
   it("rejects platform login when the account has an active school membership", async () => {
     prismaMock.user.findUnique.mockResolvedValue(user);
-    prismaMock.platformAdminGrant.findFirst.mockResolvedValue({ id: "grant-1" });
+    prismaMock.platformAdminGrant.findFirst.mockResolvedValue({
+      id: "grant-1",
+    });
     prismaMock.schoolMembership.count.mockResolvedValue(1);
 
     await expect(
@@ -189,7 +288,9 @@ describe("AuthService browser sessions", () => {
 
   it("restores platform sessions without querying or returning school memberships", async () => {
     prismaMock.user.findUnique.mockResolvedValue(user);
-    prismaMock.platformAdminGrant.findFirst.mockResolvedValue({ id: "grant-1" });
+    prismaMock.platformAdminGrant.findFirst.mockResolvedValue({
+      id: "grant-1",
+    });
 
     const result = await auth.currentSession(user.id, {
       scope: "platform",
@@ -332,6 +433,7 @@ describe("AuthService browser sessions", () => {
     prismaMock.user.findUnique.mockResolvedValue(user);
     prismaMock.schoolMembership.findFirst.mockResolvedValue(membership);
     const transaction = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       refreshToken: {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         create: jest.fn().mockResolvedValue({ id: "refresh-2" }),

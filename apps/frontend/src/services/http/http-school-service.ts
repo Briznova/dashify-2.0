@@ -16,7 +16,9 @@ import type {
   CreateAcademicSectionInput,
   CreateAnnouncementInput,
   CreateClassroomInput,
+  CreateClassroomWithSectionInput,
   CreateStaffInput,
+  CreateTeacherAccountInput,
   CreatePlatformSchoolInput,
   CreatedPlatformSchool,
   DashboardMetric,
@@ -30,16 +32,21 @@ import type {
   SchoolRole,
   SchoolSettingsData,
   StaffMember,
+  StaffDepartment,
   Student,
   StudentCreateInput,
   StudentGuardian,
   StudentInput,
   StudentPage,
+  StudentDirectorySearch,
+  StudentAdmissionInput,
   SchoolProfile,
   TeacherDashboard,
   TeacherDashboardAssignment,
   UpdateStaffInput,
   UpdateSchoolProfileInput,
+  UpdateClassroomInput,
+  UpdateAcademicSectionInput,
   MarkAttendanceInput,
 } from "@/types/school";
 
@@ -388,9 +395,17 @@ function parseStaffMember(response: unknown): StaffMember {
   const designation = typeof response.designation === "string"
     ? response.designation
     : "Staff";
-  const department = typeof response.department === "string"
-    ? response.department
-    : "General";
+  const departmentId = response.departmentId;
+  if (departmentId !== undefined && departmentId !== null && typeof departmentId !== "string") {
+    throw new ApiError("The Dashify service returned invalid staff department data.", 502);
+  }
+  const departmentRecord = response.departmentRecord == null ? null : parseDepartment(response.departmentRecord);
+  if ((departmentId && !departmentRecord) || (departmentRecord && departmentRecord.id !== departmentId)) {
+    throw new ApiError("The Dashify service returned invalid staff department data.", 502);
+  }
+  const department = departmentRecord
+    ? departmentRecord.name
+    : typeof response.department === "string" ? response.department : "General";
   const isActive = response.isActive !== false;
 
   return {
@@ -405,7 +420,16 @@ function parseStaffMember(response: unknown): StaffMember {
     firstName,
     lastName,
     phone: typeof response.phone === "string" ? response.phone : null,
+    departmentId: departmentId ?? null,
   };
+}
+
+function parseDepartment(response: unknown): StaffDepartment {
+  if (!isRecord(response) || typeof response.id !== "string" ||
+    typeof response.name !== "string" || typeof response.isActive !== "boolean") {
+    throw new ApiError("The Dashify service returned invalid department data.", 502);
+  }
+  return { id: response.id, name: response.name, isActive: response.isActive };
 }
 
 function parseAnnouncement(response: unknown): Announcement {
@@ -438,7 +462,10 @@ function parseAnnouncements(response: unknown): Announcement[] {
   return response.map(parseAnnouncement);
 }
 
-function parseStudent(response: unknown): Student {
+function parseStudent(
+  response: unknown,
+  placement: "first" | "unique" | "unique-active" = "first",
+): Student {
   if (!isRecord(response)) {
     throw new ApiError("The Dashify service returned invalid student data.", 502);
   }
@@ -449,7 +476,17 @@ function parseStudent(response: unknown): Student {
     throw new ApiError("The Dashify service returned invalid student data (enrolments).", 502);
   }
   const enrolments = response.enrolments;
-  const latest = enrolments.find(isRecord);
+  if (placement === "unique-active" && enrolments.some(
+    (enrolment) => !isRecord(enrolment) || typeof enrolment.isActive !== "boolean",
+  )) {
+    throw new ApiError("The Dashify service returned invalid student data (enrolment status).", 502);
+  }
+  const candidates = placement === "unique-active"
+    ? enrolments.filter((enrolment) => isRecord(enrolment) && enrolment.isActive === true)
+    : enrolments;
+  const latest = placement !== "first" && candidates.length !== 1
+    ? undefined
+    : candidates.find(isRecord);
   const academicYear = latest && isRecord(latest.academicYear) ? latest.academicYear : null;
   const section = latest && isRecord(latest.section) ? latest.section : null;
   const schoolClass = section && isRecord(section.class) ? section.class : null;
@@ -474,6 +511,29 @@ function parseStudent(response: unknown): Student {
     };
   });
   const primaryGuardian = guardians.find((guardian) => guardian.isPrimary) ?? guardians[0];
+  const addressValue = response.address;
+  if (addressValue != null && (!isRecord(addressValue) ||
+    ["line1", "city", "state", "postalCode"].some((key) => addressValue[key] != null && typeof addressValue[key] !== "string"))) {
+    throw new ApiError("The Dashify service returned invalid student address data.", 502);
+  }
+  const address = isRecord(addressValue) ? {
+    line1: typeof addressValue.line1 === "string" ? addressValue.line1 : undefined,
+    city: typeof addressValue.city === "string" ? addressValue.city : undefined,
+    state: typeof addressValue.state === "string" ? addressValue.state : undefined,
+    postalCode: typeof addressValue.postalCode === "string" ? addressValue.postalCode : undefined,
+  } : null;
+  let emergencyContact: Student["emergencyContact"] = null;
+  if (response.emergencyContactKind === "PRIMARY_GUARDIAN") {
+    emergencyContact = { kind: "PRIMARY_GUARDIAN" };
+  } else if (response.emergencyContactKind === "OTHER") {
+    emergencyContact = {
+      kind: "OTHER",
+      name: requiredString(response.emergencyContactName, "emergencyContactName"),
+      phone: requiredString(response.emergencyContactPhone, "emergencyContactPhone"),
+    };
+  } else if (response.emergencyContactKind != null) {
+    throw new ApiError("The Dashify service returned invalid emergency contact data.", 502);
+  }
   if (!["ACTIVE", "INACTIVE", "ARCHIVED"].includes(String(response.status))) {
     throw new ApiError("The Dashify service returned invalid student data (status).", 502);
   }
@@ -504,10 +564,13 @@ function parseStudent(response: unknown): Student {
     sectionName: section && typeof section.name === "string" ? section.name : null,
     sectionId,
     guardians,
+    ...(address ? { address } : {}),
+    ...(emergencyContact ? { emergencyContact } : {}),
+    ...(latest && typeof latest.rollNumber === "string" ? { rollNumber: latest.rollNumber } : {}),
   };
 }
 
-function parseStudentPage(response: unknown): StudentPage {
+function parseStudentPage(response: unknown, requireUniqueEnrolment = false): StudentPage {
   if (!isRecord(response) || !Array.isArray(response.data) || !isRecord(response.meta)) {
     throw new ApiError("The Dashify service returned invalid student-list data.", 502);
   }
@@ -525,7 +588,7 @@ function parseStudentPage(response: unknown): StudentPage {
     throw new ApiError("The Dashify service returned invalid student pagination data.", 502);
   }
   return {
-    data: response.data.map(parseStudent),
+    data: response.data.map((student) => parseStudent(student, requireUniqueEnrolment ? "unique" : "first")),
     meta: { page, pageSize, total, totalPages },
   };
 }
@@ -748,13 +811,22 @@ export class HttpSchoolService implements SchoolService {
     return parseStudentPage(response);
   }
 
+  async searchStudents(input: StudentDirectorySearch, signal?: AbortSignal): Promise<StudentPage> {
+    const response = await this.api.request<unknown>(
+      "/students/search",
+      { method: "POST", body: JSON.stringify(input) },
+      signal,
+    );
+    return parseStudentPage(response, true);
+  }
+
   async getStudent(id: string, signal?: AbortSignal): Promise<Student> {
     const response = await this.api.request<unknown>(
       `/students/${encodeURIComponent(id)}`,
       {},
       signal,
     );
-    return parseStudent(response);
+    return parseStudent(response, "unique-active");
   }
 
   async createStudent(input: StudentCreateInput): Promise<Student> {
@@ -763,6 +835,30 @@ export class HttpSchoolService implements SchoolService {
       body: JSON.stringify(input),
     });
     return parseStudent(response);
+  }
+
+  async admitStudent(input: StudentAdmissionInput): Promise<Student> {
+    const response = await this.api.request<unknown>("/students", {
+      method: "POST", body: JSON.stringify(input),
+    });
+    return parseStudent(response, "unique-active");
+  }
+
+  async getAdmissionSettings(signal?: AbortSignal): Promise<{ prefix: string }> {
+    return this.parseAdmissionSettings(await this.api.request<unknown>("/schools/current/admission-settings", {}, signal));
+  }
+
+  async updateAdmissionSettings(prefix: string): Promise<{ prefix: string }> {
+    return this.parseAdmissionSettings(await this.api.request<unknown>("/schools/current/admission-settings", {
+      method: "PATCH", body: JSON.stringify({ prefix }),
+    }));
+  }
+
+  private parseAdmissionSettings(response: unknown): { prefix: string } {
+    if (!isRecord(response) || typeof response.prefix !== "string" || !response.prefix.trim()) {
+      throw new ApiError("The Dashify service returned invalid admission settings.", 502);
+    }
+    return { prefix: response.prefix };
   }
 
   async updateStudent(id: string, input: StudentInput): Promise<Student> {
@@ -870,6 +966,31 @@ export class HttpSchoolService implements SchoolService {
     return parseStaffMember(response);
   }
 
+  async createTeacherAccount(input: CreateTeacherAccountInput): Promise<StaffMember> {
+    const response = await this.api.request<unknown>("/staff/teacher-accounts", {
+      method: "POST", body: JSON.stringify(input),
+    });
+    return parseStaffMember(response);
+  }
+
+  async getDepartments(signal?: AbortSignal): Promise<StaffDepartment[]> {
+    const response = await this.api.request<unknown>("/departments", {}, signal);
+    if (!Array.isArray(response)) throw new ApiError("The Dashify service returned invalid department data.", 502);
+    return response.map(parseDepartment);
+  }
+
+  async createDepartment(name: string): Promise<StaffDepartment> {
+    return parseDepartment(await this.api.request<unknown>("/departments", {
+      method: "POST", body: JSON.stringify({ name }),
+    }));
+  }
+
+  async updateDepartment(id: string, input: { name?: string; isActive?: false }): Promise<StaffDepartment> {
+    return parseDepartment(await this.api.request<unknown>(`/departments/${encodeURIComponent(id)}`, {
+      method: "PATCH", body: JSON.stringify(input),
+    }));
+  }
+
   async updateStaff(
     id: string,
     input: UpdateStaffInput,
@@ -901,6 +1022,18 @@ export class HttpSchoolService implements SchoolService {
     return parseCreatedClassroom(response);
   }
 
+  async createClassroomWithSection(input: CreateClassroomWithSectionInput): Promise<Classroom> {
+    const response = await this.api.request<unknown>("/classes/with-section", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    const [classroom] = parseAcademicClasses([response]);
+    if (classroom.sections.length !== 1) {
+      throw new ApiError("The Dashify service returned invalid created-class data.", 502);
+    }
+    return classroom;
+  }
+
   async createAcademicSection(
     input: CreateAcademicSectionInput,
   ): Promise<AcademicSection> {
@@ -909,6 +1042,25 @@ export class HttpSchoolService implements SchoolService {
       body: JSON.stringify(input),
     });
     return parseAcademicSection(response);
+  }
+
+  async updateClassroom(id: string, input: UpdateClassroomInput): Promise<Classroom> {
+    const response = await this.api.request<unknown>(`/classes/${encodeURIComponent(id)}`, {
+      method: "PUT", body: JSON.stringify(input),
+    });
+    const [classroom] = parseAcademicClasses([response]);
+    if (classroom.id !== id) throw new ApiError("The Dashify service returned a different class.", 502);
+    return classroom;
+  }
+
+  async updateAcademicSection(classId: string, sectionId: string, input: UpdateAcademicSectionInput): Promise<AcademicSection> {
+    const response = await this.api.request<unknown>(
+      `/classes/${encodeURIComponent(classId)}/sections/${encodeURIComponent(sectionId)}`,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+    const section = parseAcademicSection(response);
+    if (section.id !== sectionId) throw new ApiError("The Dashify service returned a different section.", 502);
+    return section;
   }
 
   getSchools(signal?: AbortSignal): Promise<School[]> {

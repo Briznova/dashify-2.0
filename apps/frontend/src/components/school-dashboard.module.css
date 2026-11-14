@@ -1075,6 +1075,20 @@
   margin-bottom: 14px;
 }
 
+.classCreateCard {
+  margin-bottom: 14px;
+}
+
+.classSection {
+  padding: 14px 0;
+  border-top: 1px solid #e9ebf2;
+}
+
+.classSection h3,
+.classSection p {
+  margin: 0 0 6px;
+}
+
 .createStructureForm {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

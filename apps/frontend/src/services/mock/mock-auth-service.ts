@@ -280,6 +280,12 @@ export class MockAuthService implements AuthService {
     window.localStorage.removeItem(tokenKey);
   }
 
+  changePassword(): Promise<void> {
+    return Promise.reject(
+      new Error("Changing passwords is unavailable in preview mode."),
+    );
+  }
+
   async signOut(): Promise<void> {
     window.localStorage.removeItem(SESSION_KEY);
     window.sessionStorage.removeItem(SESSION_KEY);

@@ -49,7 +49,6 @@ const expected: Record<
       "Students",
       "Staff",
       "Classes",
-      "Attendance",
       "Fees",
       "Academics",
       "Analytics",
@@ -149,6 +148,8 @@ describe("role access policy", () => {
     ["student", "/dashboard/fees"],
     ["parent", "/dashboard/students"],
     ["accountant", "/dashboard/attendance"],
+    ["school_admin", "/dashboard/attendance"],
+    ["school_admin", "/dashboard/attendance/sessions"],
     ["principal", "/dashboard/schools"],
     ["teacher", "/dashboard/settings/profile"],
   ] as const)("denies %s the unlisted route %s", (role, path) => {
@@ -205,7 +206,7 @@ describe("role access policy", () => {
       getRoleNavigation("school_admin", permissionKeys).map(
         (item) => item.capability,
       ),
-    ).toEqual(["overview", "students", "classes", "attendance", "academics"]);
+    ).toEqual(["overview", "students", "classes", "academics"]);
     expect(
       getRoleNavigation("school_admin", [...permissionKeys, "staff.read"]).map(
         (item) => item.capability,
@@ -246,7 +247,7 @@ describe("role access policy", () => {
         "school_admin",
         permissionKeys,
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isDashboardRouteAllowed(
         "/dashboard/fees",
@@ -260,6 +261,16 @@ describe("role access policy", () => {
         "school.update",
       ]),
     ).toBe(true);
+  });
+
+  it("keeps attendance available to principal and teacher, and reports to school admin", () => {
+    const permissions = ["attendance.read", "school.read", "reports.read"];
+    for (const role of ["principal", "teacher"] as const) {
+      expect(getRoleNavigation(role, permissions).map((item) => item.capability)).toContain("attendance");
+      expect(isDashboardRouteAllowed("/dashboard/attendance", role, permissions)).toBe(true);
+    }
+    expect(isDashboardRouteAllowed("/dashboard/attendance/nested", "school_admin", permissions)).toBe(false);
+    expect(isDashboardRouteAllowed("/dashboard/reports", "school_admin", permissions)).toBe(true);
   });
 
   it("limits platform navigation to the platform-school permission", () => {

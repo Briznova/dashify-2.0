@@ -8,7 +8,9 @@ import type {
   CreateAnnouncementInput,
   CreateAcademicYearInput,
   CreateClassroomInput,
+  CreateClassroomWithSectionInput,
   CreateStaffInput,
+  CreateTeacherAccountInput,
   CreatePlatformSchoolInput,
   CreatedPlatformSchool,
   AcademicReport,
@@ -26,14 +28,19 @@ import type {
   SchoolRole,
   SchoolSettingsData,
   StaffMember,
+  StaffDepartment,
   Student,
   StudentCreateInput,
   StudentInput,
   StudentPage,
+  StudentDirectorySearch,
+  StudentAdmissionInput,
   SchoolProfile,
   TeacherDashboard,
   UpdateStaffInput,
   UpdateSchoolProfileInput,
+  UpdateClassroomInput,
+  UpdateAcademicSectionInput,
   MarkAttendanceInput,
 } from "@/types/school";
 
@@ -42,8 +49,12 @@ export interface SchoolService {
   getTeacherDashboard(signal?: AbortSignal): Promise<TeacherDashboard>;
   getPortalOverview(role: PortalRole, signal?: AbortSignal): Promise<PortalOverview>;
   getStudents(page?: number, pageSize?: number, signal?: AbortSignal): Promise<StudentPage>;
+  searchStudents(input: StudentDirectorySearch, signal?: AbortSignal): Promise<StudentPage>;
   getStudent(id: string, signal?: AbortSignal): Promise<Student>;
   createStudent(input: StudentCreateInput): Promise<Student>;
+  admitStudent(input: StudentAdmissionInput): Promise<Student>;
+  getAdmissionSettings(signal?: AbortSignal): Promise<{ prefix: string }>;
+  updateAdmissionSettings(prefix: string): Promise<{ prefix: string }>;
   updateStudent(id: string, input: StudentInput): Promise<Student>;
   getAcademicYears(signal?: AbortSignal): Promise<AcademicYear[]>;
   createAcademicYear(input: CreateAcademicYearInput): Promise<AcademicYear>;
@@ -52,11 +63,18 @@ export interface SchoolService {
   createAnnouncement(input: CreateAnnouncementInput): Promise<Announcement>;
   publishAnnouncement(id: string): Promise<Announcement>;
   createStaff(input: CreateStaffInput): Promise<StaffMember>;
+  createTeacherAccount(input: CreateTeacherAccountInput): Promise<StaffMember>;
   updateStaff(id: string, input: UpdateStaffInput): Promise<StaffMember>;
   deactivateStaff(id: string): Promise<void>;
+  getDepartments(signal?: AbortSignal): Promise<StaffDepartment[]>;
+  createDepartment(name: string): Promise<StaffDepartment>;
+  updateDepartment(id: string, input: { name?: string; isActive?: false }): Promise<StaffDepartment>;
   getClassrooms(signal?: AbortSignal): Promise<Classroom[]>;
   createClassroom(input: CreateClassroomInput): Promise<Classroom>;
+  createClassroomWithSection(input: CreateClassroomWithSectionInput): Promise<Classroom>;
   createAcademicSection(input: CreateAcademicSectionInput): Promise<AcademicSection>;
+  updateClassroom(id: string, input: UpdateClassroomInput): Promise<Classroom>;
+  updateAcademicSection(classId: string, sectionId: string, input: UpdateAcademicSectionInput): Promise<AcademicSection>;
   getSchools(signal?: AbortSignal): Promise<School[]>;
   getPlatformSchools(signal?: AbortSignal): Promise<PlatformSchool[]>;
   getPlatformSchool(id: string, signal?: AbortSignal): Promise<PlatformSchoolDetail | null>;

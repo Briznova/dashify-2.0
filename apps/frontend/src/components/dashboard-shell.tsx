@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import styles from "./dashboard-shell.module.css";
 import { useAuth, useAuthSession } from "@/hooks/use-auth";
 import {
@@ -14,7 +14,7 @@ import {
 } from "@/lib/access-policy";
 import { getDashboardRoute } from "@/lib/dashboard-route";
 import { isPlatformPage, platformPages } from "@/lib/platform-pages";
-import { isApiMode } from "@/services";
+import { authService, isApiMode } from "@/services";
 import type { UserRole } from "@/types/auth";
 import { Icon } from "./ui/icon";
 
@@ -39,6 +39,105 @@ function formatRole(role: UserRole) {
     .join(" ");
 }
 
+function ChangePasswordForm({ onCancel }: { onCancel: () => void }) {
+  const currentPasswordRef = useRef<HTMLInputElement>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    currentPasswordRef.current?.focus();
+  }, []);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    if (newPassword !== confirmation) {
+      setError("New passwords do not match.");
+      return;
+    }
+    setPending(true);
+    try {
+      await authService.changePassword({ currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmation("");
+      setSuccess(true);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Could not change your password.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (success) {
+    return (
+      <div className={styles.passwordForm}>
+        <p role="status">
+          Password changed. Your other sessions have been signed out.
+        </p>
+        <button type="button" onClick={onCancel}>
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form className={styles.passwordForm} onSubmit={submit}>
+      <strong>Change password</strong>
+      <label>
+        Current password
+        <input
+          ref={currentPasswordRef}
+          type="password"
+          autoComplete="current-password"
+          required
+          value={currentPassword}
+          onChange={(event) => setCurrentPassword(event.target.value)}
+        />
+      </label>
+      <label>
+        New password
+        <input
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={12}
+          maxLength={1024}
+          value={newPassword}
+          onChange={(event) => setNewPassword(event.target.value)}
+        />
+      </label>
+      <small>Use at least 12 characters. Passphrases are welcome.</small>
+      <label>
+        Confirm new password
+        <input
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={12}
+          maxLength={1024}
+          value={confirmation}
+          onChange={(event) => setConfirmation(event.target.value)}
+        />
+      </label>
+      {error && <p className={styles.signOutError} role="alert">{error}</p>}
+      <button className={styles.passwordSubmit} type="submit" disabled={pending}>
+        {pending ? "Changing..." : "Change password"}
+      </button>
+      <button type="button" onClick={onCancel} disabled={pending}>
+        Cancel
+      </button>
+    </form>
+  );
+}
+
 const notificationsByRole: Record<
   UserRole,
   { title: string; detail: string; href: string; action: string }[]
@@ -58,12 +157,6 @@ const notificationsByRole: Record<
     },
   ],
   school_admin: [
-    {
-      title: "Attendance follow-up",
-      detail: "Two students are below the 90% attendance target.",
-      href: "/dashboard/attendance",
-      action: "Review attendance",
-    },
     {
       title: "Enrollment requests",
       detail: "Three student applications are waiting for review.",
@@ -157,6 +250,9 @@ export function DashboardShell({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const passwordButtonRef = useRef<HTMLButtonElement>(null);
+  const restorePasswordButtonFocus = useRef(false);
   const [notificationsRead, setNotificationsRead] = useState(false);
   const { signOut, isPending, error: signOutError } = useAuth();
   const {
@@ -212,10 +308,18 @@ export function DashboardShell({
   }, [isSessionLoading, pathname, router, session, sessionError]);
 
   useEffect(() => {
+    if (!passwordOpen && restorePasswordButtonFocus.current) {
+      passwordButtonRef.current?.focus();
+      restorePasswordButtonFocus.current = false;
+    }
+  }, [passwordOpen]);
+
+  useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setNotificationsOpen(false);
         setProfileOpen(false);
+        setPasswordOpen(false);
       }
     }
 
@@ -293,7 +397,11 @@ export function DashboardShell({
         <button
           className={styles.backdrop}
           aria-label="Close navigation"
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => {
+            setSidebarOpen(false);
+            setProfileOpen(false);
+            setPasswordOpen(false);
+          }}
         />
       )}
       <aside
@@ -380,7 +488,10 @@ export function DashboardShell({
             className={styles.profileButton}
             aria-label={`Signed in as ${user.name}`}
             aria-expanded={profileOpen}
-            onClick={() => setProfileOpen(!profileOpen)}
+            onClick={() => {
+              setPasswordOpen(false);
+              setProfileOpen(!profileOpen);
+            }}
           >
             <span className={styles.profileAvatar}>{initials}</span>
             <span className={styles.profileText}>
@@ -393,30 +504,54 @@ export function DashboardShell({
           </button>
           {profileOpen && (
             <div className={styles.profileMenu}>
-              <div className={styles.profileDetails}>
-                <strong>{user.name}</strong>
-                <span>{user.email}</span>
-                <small>{formatRole(role)}</small>
-              </div>
-              {settingsAvailable && (
-                <Link
-                  href="/dashboard/settings"
-                  onClick={() => setProfileOpen(false)}
-                >
-                  Workspace settings
-                </Link>
-              )}
-              <button
-                type="button"
-                onClick={handleSignOut}
-                disabled={isPending}
-              >
-                {isPending ? "Signing out..." : "Sign out"}
-              </button>
-              {signOutError && (
-                <p className={styles.signOutError} role="alert">
-                  {signOutError}
-                </p>
+              {passwordOpen ? (
+                <ChangePasswordForm
+                  onCancel={() => {
+                    restorePasswordButtonFocus.current = true;
+                    setPasswordOpen(false);
+                  }}
+                />
+              ) : (
+                <>
+                  <div className={styles.profileDetails}>
+                    <strong>{user.name}</strong>
+                    <span>{user.email}</span>
+                    <small>{formatRole(role)}</small>
+                  </div>
+                  {settingsAvailable && (
+                    <Link
+                      href="/dashboard/settings"
+                      onClick={() => setProfileOpen(false)}
+                    >
+                      Workspace settings
+                    </Link>
+                  )}
+                  {isApiMode ? (
+                    <button
+                      ref={passwordButtonRef}
+                      type="button"
+                      onClick={() => setPasswordOpen(true)}
+                    >
+                      Change password
+                    </button>
+                  ) : (
+                    <p className={styles.previewNote}>
+                      Password changes are unavailable in preview mode.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    disabled={isPending}
+                  >
+                    {isPending ? "Signing out..." : "Sign out"}
+                  </button>
+                  {signOutError && (
+                    <p className={styles.signOutError} role="alert">
+                      {signOutError}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -521,7 +656,11 @@ export function DashboardShell({
               className={styles.topAvatar}
               aria-label={`Open ${user.name} profile`}
               aria-expanded={profileOpen}
-              onClick={() => setProfileOpen(!profileOpen)}
+              onClick={() => {
+                if (!profileOpen) setSidebarOpen(true);
+                setPasswordOpen(false);
+                setProfileOpen(!profileOpen);
+              }}
             >
               {initials}
             </button>

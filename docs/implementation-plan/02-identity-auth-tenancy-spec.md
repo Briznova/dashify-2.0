@@ -65,6 +65,7 @@ The approved auth/session/school operation and schema direction is captured in [
 | `POST /api/v1/auth/login` | Accept email/password; set HttpOnly auth cookies; return safe user and membership metadata, never token values in JSON. |
 | `POST /api/v1/auth/refresh` | Rotate the current session's refresh credential and auth cookies; preserve only a still-valid school/workspace context. |
 | `POST /api/v1/auth/logout` | Revoke only the current refresh session, clear its cookies, and be safe to repeat. |
+| `POST /api/v1/auth/change-password` | Authenticated user supplies current and new passwords; preserve the current session and revoke other sessions. |
 | `GET /api/v1/auth/me` | Return the authenticated user and current membership/school/workspace context. |
 | `GET /api/v1/auth/schools` | Return the authenticated user's active memberships; this is not a platform-wide directory. |
 | `POST /api/v1/auth/active-school` | Validate membership and selected workspace role, then set the scoped session context; never accept caller-defined permissions. |
@@ -102,6 +103,10 @@ Response: `200`, sets scoped cookies and returns `{ "user": ..., "activeSchool":
 - `GET /api/v1/auth/me` returns user identity, memberships, active school, available workspace roles, selected workspace role, and effective permission keys; unauthenticated/expired sessions return `401`.
 - `POST /api/v1/auth/refresh` accepts the refresh cookie, rotates the current browser session, and returns refreshed safe session metadata. It fails closed for expired, revoked, reused, or no-longer-authorized sessions.
 - `POST /api/v1/auth/logout` revokes the current browser session, clears auth/CSRF cookies, and returns `204`; repeating logout is safe.
+
+### Authenticated password change
+
+`POST /api/v1/auth/change-password` requires an active authenticated session, Origin and CSRF validation for cookie requests, and `{ "currentPassword": "...", "newPassword": "..." }`. The new password must have 12–1024 characters; passphrases are allowed and no character classes are required. The current password must not be empty. Success returns `204`, preserves the current session, and revokes other sessions, including legacy refresh credentials without session IDs. Incorrect current passwords and invalid input return `400`; invalid sessions return `401`. The endpoint uses the application's per-IP limit of five requests per minute. Successful and incorrect-password attempts are audited without password values. This does not implement email-based password recovery.
 
 ### Password-reset API proposal (provider decision pending)
 

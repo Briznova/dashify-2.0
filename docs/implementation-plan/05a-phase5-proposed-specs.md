@@ -141,6 +141,10 @@ Audit `changedFields` lists request fields supplied to the update, not a compute
 
 Administrators need a staff directory and teacher assignment model that maps teachers to sections and classes.
 
+The following baseline describes the original delivered slice. The approved
+Teacher onboarding and departments section below supersedes its exclusions and
+extends the contract.
+
 ## Personas and authorization
 
 | Persona / backend role | Scope | Allowed actions | Denied actions |
@@ -198,6 +202,41 @@ Administrators need a staff directory and teacher assignment model that maps tea
 - Which additional staff lifecycle operations, if any, need approval beyond profile update/deactivation?
 - Which additional teacher self-service views or attendance actions should be approved after this dashboard slice?
 
+## Approved teacher onboarding and departments (2026-11-14)
+
+School Admin creates new Teacher accounts from Staff using an individual
+password entered by the administrator. The email is a new, globally unique
+login; existing accounts are rejected rather than automatically linked.
+Creation is atomic across the user, school membership, Teacher role and staff
+profile. Passwords are at least 12 characters, hashed, never returned or
+audited, and must be communicated separately. This is not an invitation:
+email verification, forced password change and delivery are not implemented.
+Existing-account linking remains a separate existing API; provisioning accounts
+for existing staff is out of scope.
+
+The staff designation selector offers Teacher only. Departments are optional,
+school-scoped, and configured in School Admin Settings. Administrators may add,
+rename and deactivate departments; deactivation preserves associated staff.
+Creation and edits only accept active departments from the active school, while
+existing inactive department assignments remain visible. Legacy free-text values
+remain readable. Staff accounts and department mutations are limited to the
+active School Admin workspace and their respective backend permissions.
+
+New schools need the standard Teacher role and the previously approved
+`dashboard.teacher.read` and `announcements.read` grants. Existing roles that
+do not match the standard must not be silently expanded. No other workspace,
+role grants, invitation system or Teacher workspace functionality is included.
+Verify login, authorization, duplicate-email races, CSRF, tenant isolation,
+department validation and safe deactivation in isolated PostgreSQL tests.
+
+Verification (2026-11-14): focused frontend tests, TypeScript, lint and
+production build passed. Backend staff unit tests and typecheck passed; isolated
+PostgreSQL HTTP tests verified Teacher login and revocation, exact role grants,
+school/workspace authorization, CSRF, department isolation and lifecycle,
+duplicate-email concurrency and redacted audit. The additive migration was
+applied locally with approval. Browser smoke checks used synthetic intercepted
+responses; production isolation and operational hardening remain release gates.
+
 **Delegated account-scope decision (2026-11-13):** Use existing accounts only because no invitation/password-setup endpoint or email delivery provider is configured. School Admin may link an existing account to an active-school staff profile and grant only the Teacher role; creating credentials and granting other roles remain gated. Deactivation preserves the global user and other school roles while revoking this staff-linked Teacher access. Profile update audits record changed field names, not submitted PII values.
 
 **Implementation evidence (2026-11-13):** Staff profile creation/update/deactivation and existing-account Teacher linkage are implemented across backend and API-mode frontend. Deactivation also disables class/section assignments and revokes the Teacher membership role; a membership is revoked only when no other school roles remain. Added a uniqueness constraint for one linked staff profile per school user, with a migration precheck that fails rather than silently resolving duplicate links.
@@ -206,7 +245,7 @@ Administrators need a staff directory and teacher assignment model that maps tea
 
 # 3) Academic structure management
 
-**Status:** Partially implemented — academic-year list/create, class/section reads, and class/section creation are delivered; lifecycle changes remain Draft
+**Status:** Partially implemented — academic-year list/create and class/section read, create and edit are delivered; deactivation and deletion remain Draft
 **Owner:** Product + backend + frontend
 **Target release:** TBD
 
@@ -218,7 +257,7 @@ Schools need durable academic-year, class, and section definitions that can be u
 
 | Persona / backend role | Scope | Allowed actions | Denied actions |
 |---|---|---|---|
-| School Admin | Active school from authenticated session | Read/create academic years and classes/sections | Cross-school access; edit/archive/delete is not implemented |
+| School Admin | Active school from authenticated session | Read/create academic years; read/create/edit classes and sections | Cross-school access; archive/delete is not implemented |
 | Teacher | No academic-structure grant in this slice | None through these routes | Manage academic structure |
 
 ## Scope
@@ -227,9 +266,10 @@ Schools need durable academic-year, class, and section definitions that can be u
 - List and create academic years in the active school.
 - List classes with sections in the active school.
 - Create classes and sections in the active school (the approved Phase 5 write slice).
+- Edit class and section fields from the class details page (approved follow-up).
 
 ### Out of scope
-- Editing, deactivating, or deleting academic years, classes, or sections.
+- Editing academic years; deactivating or deleting academic years, classes, or sections.
 - Timetable optimization and scheduling conflict resolution.
 - Multi-campus structure; campus scope remains undecided.
 
@@ -275,6 +315,49 @@ either request body.
 
 **Implementation evidence (2026-11-12):** Class and section forms are integrated with the authenticated API service. Backend service and DTO/permission tests, frontend adapter and form tests, both app typechecks, and both production builds passed. No live API/database integration was run.
 
+### Approved combined creation follow-up
+
+The School Admin creates a new class and its first section in one form and one
+atomic transaction. Adding sections to existing active classes remains available
+as a separate action. The existing class-only and section APIs remain compatible.
+The new `POST /api/v1/classes/with-section` requires
+`academic_structure.manage`, cookie authentication, an active school and the
+standard CSRF protections. It accepts `{ name, code, sortOrder?, section:
+{ name, code, capacity? } }`; it returns the created class with a one-element
+`sections` array. The validation constraints match the existing class and
+section DTOs. A duplicate class code is a 409; invalid input is a 400.
+Both creation audit entries and both records commit or roll back together.
+See [academic structure contract](../api-contracts/academic-structure.openapi.yaml).
+Focused backend tests cover DTO validation, permission metadata, tenant-scoped
+writes and propagated transaction failures; frontend tests cover the combined
+request, error display and the separate section action. PostgreSQL rollback and
+live HTTP behavior were not exercised for this follow-up.
+
+### Approved class details and editing follow-up (2026-11-14)
+
+The class directory keeps the combined class/first-section form; individual
+class links open a details page. Managers can edit class name, code and sort
+order, add sections, and edit each section's name, code and capacity there.
+Readers can view the page but cannot mutate it. Deactivation and deletion are
+not included. Existing active-school reads and `academic_structure.read` apply;
+all mutations require `academic_structure.manage` and CSRF protection.
+
+`PUT /api/v1/classes/:id` accepts `{ name, code, sortOrder }`.
+`PUT /api/v1/classes/:classId/sections/:sectionId` accepts
+`{ name, code, capacity }`, where capacity is a positive integer or null (no
+limit). Both update only active records in the active school, reject duplicate
+codes with 409, and record an audit entry in the transaction. Invalid input is
+400 and unavailable or cross-school records are 404. Capacity cannot be less
+than the number of active, unended enrolments for non-archived students in any
+one academic year; this matches admission's per-year capacity definition.
+The capacity check and update take the same school lock as admission, so
+concurrent admissions cannot bypass the limit. No migration is required.
+
+Verification: focused frontend and backend tests and typechecks passed. An
+isolated PostgreSQL HTTP test covered authorization, CSRF, tenant isolation,
+duplicate codes, capacity conflicts and concurrent admission versus capacity
+reduction. The application database was not changed.
+
 ## API contract
 
 | Method and path | Auth/context | Permission | Request | Response | Errors |
@@ -283,6 +366,7 @@ either request body.
 | `POST /api/v1/academic-years` | Cookie auth + active school | `academic_structure.manage` | Academic-year DTO | Created academic year | 400/401/403/409 |
 | `GET /api/v1/classes` | Cookie auth + active school | `academic_structure.read` | None | Active classes with active sections | 400/401/403 |
 | `POST /api/v1/classes` | Cookie auth + active school | `academic_structure.manage` | `{ name, code, sortOrder? }` | Created class | 400/401/403/409 |
+| `POST /api/v1/classes/with-section` | Cookie auth + active school | `academic_structure.manage` | Class fields and nested first section | Created class with first section | 400/401/403/409 |
 | `POST /api/v1/sections` | Cookie auth + active school | `academic_structure.manage` | `{ classId, name, code, capacity? }` | Created section | 400/401/403/404/409 |
 
 ## Data and privacy

@@ -117,6 +117,7 @@ model School {
   timezone    String   @default("Asia/Kolkata")
   locale      String   @default("en-IN")
   currency    String   @default("INR")
+  admissionPrefix String? @map("admission_prefix")
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -124,6 +125,7 @@ model School {
   academicYears AcademicYear[]
   classes     SchoolClass[]
   staff       StaffProfile[]
+  departments SchoolDepartment[]
   teacherAssignments TeacherAssignment[]
   students    Student[]
   guardians   Guardian[]
@@ -131,10 +133,21 @@ model School {
   announcements Announcement[]
   auditLogs   AuditLog[]
   fileObjects FileObject[]
+  admissionSequences AdmissionSequence[]
   onboardingState SchoolOnboardingState?
   supportTickets PlatformSupportTicket[]
 
   @@map("schools")
+}
+
+model AdmissionSequence {
+  schoolId String @db.Uuid @map("school_id")
+  year     Int
+  lastValue Int @default(0) @map("last_value")
+  school School @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+
+  @@id([schoolId, year])
+  @@map("admission_sequences")
 }
 
 model User {
@@ -395,17 +408,34 @@ model StaffProfile {
   employeeCode String? @map("employee_code")
   designation String?
   department String?
+  departmentId String? @db.Uuid @map("department_id")
   joinedAt  DateTime? @map("joined_at")
   isActive  Boolean @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   school    School @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  departmentRecord SchoolDepartment? @relation(fields: [schoolId, departmentId], references: [schoolId, id], onDelete: Restrict)
   teacherAssignments TeacherAssignment[]
 
   @@unique([schoolId, userId])
   @@unique([schoolId, employeeCode])
   @@index([schoolId, isActive])
   @@map("staff_profiles")
+}
+
+model SchoolDepartment {
+  id        String @id @default(uuid()) @db.Uuid
+  schoolId  String @db.Uuid @map("school_id")
+  name      String
+  isActive  Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  school    School @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  staff     StaffProfile[]
+
+  @@unique([schoolId, id])
+  @@index([schoolId, isActive])
+  @@map("school_departments")
 }
 
 model TeacherAssignment {
@@ -442,6 +472,10 @@ model Student {
   admissionDate   DateTime @db.Date @map("admission_date")
   status          RecordStatus @default(ACTIVE)
   archivedAt      DateTime? @map("archived_at")
+  address         Json?
+  emergencyContactKind String? @map("emergency_contact_kind")
+  emergencyContactName String? @map("emergency_contact_name")
+  emergencyContactPhone String? @map("emergency_contact_phone")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
   school          School @relation(fields: [schoolId], references: [id], onDelete: Restrict)
@@ -496,6 +530,7 @@ model StudentEnrolment {
   startDate     DateTime @db.Date @map("start_date")
   endDate       DateTime? @db.Date @map("end_date")
   isActive      Boolean @default(true) @map("is_active")
+  rollNumber    String? @map("roll_number")
   createdAt     DateTime @default(now()) @map("created_at")
   student       Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
   academicYear  AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)

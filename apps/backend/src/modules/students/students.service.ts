@@ -5,7 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateStudentDto } from './dto/create-student.dto';
+import { StudentDirectorySearchDto } from './dto/student-directory-search.dto';
+import { CreateAdmissionDto } from './dto/create-admission.dto';
 
 const studentEnrolmentsInclude = (schoolId: string) => ({
   where: {
@@ -29,6 +32,13 @@ const studentEnrolmentsInclude = (schoolId: string) => ({
   orderBy: [{ startDate: 'desc' as const }, { createdAt: 'desc' as const }],
 });
 
+const privateStudentFields = {
+  address: true,
+  emergencyContactKind: true,
+  emergencyContactName: true,
+  emergencyContactPhone: true,
+} as const;
+
 @Injectable()
 export class StudentsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -41,7 +51,66 @@ export class StudentsService {
           skip: (page - 1) * pageSize,
           take: pageSize,
           orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+          omit: privateStudentFields,
           include: { enrolments: studentEnrolmentsInclude(schoolId) },
+        }),
+        tx.student.count({ where }),
+      ]);
+      return { data, meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } };
+    });
+  }
+
+  async search(schoolId: string, dto: StudentDirectorySearchDto) {
+    const page = dto.page ?? 1;
+    const pageSize = dto.pageSize ?? 20;
+    const placementWhere: Prisma.StudentEnrolmentWhereInput = {
+      schoolId,
+      isActive: true,
+      academicYear: { is: { schoolId } },
+      section: {
+        is: {
+          schoolId,
+          class: { is: { schoolId, ...(dto.classId ? { id: dto.classId } : {}) } },
+        },
+      },
+      ...(dto.academicYearId ? { academicYearId: dto.academicYearId } : {}),
+      ...(dto.classId ? { classId: dto.classId } : {}),
+      ...(dto.sectionId ? { sectionId: dto.sectionId } : {}),
+    };
+    const terms = (dto.query ?? '').trim().split(/\s+/).filter(Boolean);
+    const conditions: Prisma.StudentWhereInput[] = terms.map((term) => {
+      const literal = term.replace(/[\\%_]/g, '\\$&');
+      return {
+        OR: [
+          { firstName: { contains: literal, mode: 'insensitive' } },
+          { middleName: { contains: literal, mode: 'insensitive' } },
+          { lastName: { contains: literal, mode: 'insensitive' } },
+          { admissionNumber: { contains: literal, mode: 'insensitive' } },
+        ],
+      };
+    });
+    if (dto.academicYearId || dto.classId || dto.sectionId) {
+      conditions.push({ enrolments: { some: placementWhere } });
+    }
+    const where: Prisma.StudentWhereInput = {
+      schoolId,
+      status: dto.status ?? { not: 'ARCHIVED' },
+      ...(conditions.length ? { AND: conditions } : {}),
+    };
+    return this.prisma.withTenant(schoolId, async (tx) => {
+      const [data, total] = await Promise.all([
+        tx.student.findMany({
+          where,
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }, { id: 'asc' }],
+          omit: privateStudentFields,
+          include: {
+            enrolments: {
+              ...studentEnrolmentsInclude(schoolId),
+              where: placementWhere,
+            },
+          },
         }),
         tx.student.count({ where }),
       ]);
@@ -53,7 +122,7 @@ export class StudentsService {
       const student = await tx.student.findFirst({
         where: { id, schoolId },
         include: {
-          guardians: { include: { guardian: true } },
+          guardians: { where: { schoolId, guardian: { is: { schoolId } } }, include: { guardian: true } },
           enrolments: studentEnrolmentsInclude(schoolId),
         },
       });
@@ -61,31 +130,81 @@ export class StudentsService {
       return student;
     });
   }
-  async create(schoolId: string, actorId: string, dto: CreateStudentDto) {
+  async create(schoolId: string, actorId: string, dto: CreateAdmissionDto) {
+    if (dto.dateOfBirth > dto.admissionDate) {
+      throw new BadRequestException('Date of birth must not be after admission date');
+    }
+    if (dto.guardians.filter((guardian) => guardian.isPrimary).length !== 1) {
+      throw new BadRequestException('Exactly one primary guardian is required');
+    }
+    if (dto.emergencyContact.kind === 'PRIMARY_GUARDIAN' &&
+      (dto.emergencyContact.name !== undefined || dto.emergencyContact.phone !== undefined)) {
+      throw new BadRequestException('Primary guardian emergency contact must not include separate contact details');
+    }
     return this.prisma.withTenant(schoolId, async (tx) => {
-      const exists = await tx.student.findFirst({ where: { schoolId, admissionNumber: dto.admissionNumber } });
-      if (exists) throw new ConflictException('Admission number already exists');
+      const schools = await tx.$queryRaw<{ code: string; admission_prefix: string | null }[]>`
+        SELECT code, admission_prefix FROM schools WHERE id = ${schoolId}::uuid AND is_active = true FOR UPDATE
+      `;
+      if (!schools.length) throw new NotFoundException('School not found');
       const [year, schoolClass, section] = await Promise.all([
         tx.academicYear.findFirst({ where: { id: dto.academicYearId, schoolId } }),
         tx.schoolClass.findFirst({ where: { id: dto.classId, schoolId, isActive: true } }),
         tx.section.findFirst({ where: { id: dto.sectionId, schoolId, classId: dto.classId, isActive: true } }),
       ]);
       if (!year || !schoolClass || !section) throw new NotFoundException('Academic year, class or section not found');
+      const placementWhere = {
+        schoolId, academicYearId: dto.academicYearId, sectionId: dto.sectionId,
+        isActive: true, endDate: null,
+      };
+      if (section.capacity !== null) {
+        const occupied = await tx.studentEnrolment.count({
+          where: { ...placementWhere, student: { is: { schoolId, status: { not: 'ARCHIVED' } } } },
+        });
+        if (occupied >= section.capacity) throw new ConflictException('Section capacity has been reached');
+      }
+      if (dto.rollNumber && await tx.studentEnrolment.findFirst({
+        where: { ...placementWhere, rollNumber: dto.rollNumber }, select: { id: true },
+      })) {
+        throw new ConflictException('Roll number is already in use in this section and year');
+      }
+      const admissionYear = Number(dto.admissionDate.slice(0, 4));
+      const sequence = await tx.admissionSequence.upsert({
+        where: { schoolId_year: { schoolId, year: admissionYear } },
+        create: { schoolId, year: admissionYear, lastValue: 0 },
+        update: {},
+      });
+      const base = `${schools[0].admission_prefix ?? schools[0].code}-${admissionYear}-`;
+      const existingIds = new Set((await tx.student.findMany({
+        where: { schoolId, admissionNumber: { startsWith: base.replace(/[\\%_]/g, '\\$&') } },
+        select: { admissionNumber: true },
+      })).map((student) => student.admissionNumber));
+      let next = sequence.lastValue;
+      let admissionNumber: string;
+      do {
+        next += 1;
+        if (next > 2147483647) throw new ConflictException('Admission sequence is exhausted');
+        admissionNumber = `${base}${String(next).padStart(4, '0')}`;
+      } while (existingIds.has(admissionNumber));
+      await tx.admissionSequence.update({ where: { schoolId_year: { schoolId, year: admissionYear } }, data: { lastValue: next } });
       const student = await tx.student.create({
         data: {
-          schoolId, admissionNumber: dto.admissionNumber, firstName: dto.firstName,
+          schoolId, admissionNumber, firstName: dto.firstName,
           middleName: dto.middleName, lastName: dto.lastName,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+          dateOfBirth: new Date(dto.dateOfBirth),
           gender: dto.gender, admissionDate: new Date(dto.admissionDate),
+          ...(dto.address ? { address: { ...dto.address } } : {}),
+          emergencyContactKind: dto.emergencyContact.kind,
+          emergencyContactName: dto.emergencyContact.kind === 'OTHER' ? dto.emergencyContact.name : null,
+          emergencyContactPhone: dto.emergencyContact.kind === 'OTHER' ? dto.emergencyContact.phone : null,
         },
       });
       for (const guardianInput of dto.guardians ?? []) {
         const guardian = await tx.guardian.create({ data: { schoolId, firstName: guardianInput.firstName, lastName: guardianInput.lastName, phone: guardianInput.phone, email: guardianInput.email } });
         await tx.studentGuardian.create({ data: { schoolId, studentId: student.id, guardianId: guardian.id, relationship: guardianInput.relationship, isPrimary: guardianInput.isPrimary ?? false } });
       }
-      await tx.studentEnrolment.create({ data: { schoolId, studentId: student.id, academicYearId: year.id, classId: schoolClass.id, sectionId: section.id, startDate: new Date(dto.admissionDate) } });
-      await tx.auditLog.create({ data: { schoolId, actorUserId: actorId, action: 'STUDENT_CREATED', resource: 'student', resourceId: student.id, summary: { admissionNumber: dto.admissionNumber } } });
-      return tx.student.findUniqueOrThrow({ where: { id: student.id }, include: { guardians: { include: { guardian: true } }, enrolments: true } });
+      await tx.studentEnrolment.create({ data: { schoolId, studentId: student.id, academicYearId: year.id, classId: schoolClass.id, sectionId: section.id, startDate: new Date(dto.admissionDate), rollNumber: dto.rollNumber } });
+      await tx.auditLog.create({ data: { schoolId, actorUserId: actorId, action: 'STUDENT_CREATED', resource: 'student', resourceId: student.id } });
+      return tx.student.findUniqueOrThrow({ where: { id: student.id }, include: { guardians: { include: { guardian: true } }, enrolments: studentEnrolmentsInclude(schoolId) } });
     });
   }
 
@@ -110,11 +229,18 @@ export class StudentsService {
     }
 
     return this.prisma.withTenant(schoolId, async (tx) => {
+      if (dto.admissionNumber !== undefined) {
+        await tx.$queryRaw`SELECT id FROM schools WHERE id = ${schoolId}::uuid FOR UPDATE`;
+      }
       const student = await tx.student.findFirst({
         where: { id, schoolId },
         include: { guardians: { include: { guardian: true } }, enrolments: true },
       });
       if (!student) throw new NotFoundException('Student not found');
+      if (student.emergencyContactKind && guardianInputs &&
+        guardianInputs.filter((guardian) => guardian.isPrimary === true).length !== 1) {
+        throw new BadRequestException('Exactly one primary guardian is required');
+      }
 
       const linkedGuardianIds = new Set(
         student.guardians.map((link) => link.guardianId),

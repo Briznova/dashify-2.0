@@ -1,0 +1,140 @@
+openapi: 3.0.3
+info:
+  title: DASHIFY Student Directory Contract
+  version: 1.0.0
+  description: Approved directory search and preview slice; existing student routes are unchanged.
+servers:
+  - url: http://localhost:3001/api/v1
+paths:
+  /students/search:
+    post:
+      operationId: searchStudents
+      summary: Search the active school's student directory
+      description: >
+        Requires students.read and a school-scoped session. The school is derived
+        from the session. Archived students are excluded. Search tokens are
+        case-insensitive literal substrings of first, middle or last name or
+        admission number, with all whitespace-separated tokens required. No
+        phone search. Academic filters apply together to one enrolment with
+        isActive=true; no effective-date interpretation is implied. Unknown
+        or foreign-school valid filter IDs yield no matching data and do not reveal
+        the existence of another school's records. Results sort by last name,
+        first name and ID. Search terms must not be logged or put in URLs.
+      security:
+        - accessCookie: []
+      parameters:
+        - name: Origin
+          in: header
+          required: true
+          schema: { type: string }
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                query: { type: string, maxLength: 100, nullable: true }
+                academicYearId: { type: string, format: uuid, nullable: true }
+                classId: { type: string, format: uuid, nullable: true }
+                sectionId: { type: string, format: uuid, nullable: true }
+                status: { type: string, enum: [ACTIVE, INACTIVE], nullable: true }
+                page: { type: integer, minimum: 1, maximum: 1000000, default: 1, nullable: true }
+                pageSize: { type: integer, minimum: 1, maximum: 100, default: 20, nullable: true }
+      responses:
+        "200":
+          description: A page of matching students; an out-of-range page is empty.
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Student" }
+                  meta:
+                    type: object
+                    required: [page, pageSize, total, totalPages]
+                    properties:
+                      page: { type: integer }
+                      pageSize: { type: integer }
+                      total: { type: integer, minimum: 0 }
+                      totalPages: { type: integer, minimum: 0 }
+        "400": { description: Invalid body, identifier, status or pagination }
+        "401": { description: Authentication required }
+        "403": { description: Insufficient permission or invalid Origin/CSRF }
+        "429": { description: Rate limit exceeded }
+components:
+  securitySchemes:
+    accessCookie: { type: apiKey, in: cookie, name: dashify_access }
+  schemas:
+    Student:
+      type: object
+      required: [id, schoolId, admissionNumber, firstName, middleName, lastName, dateOfBirth, gender, admissionDate, status, archivedAt, createdAt, updatedAt, enrolments]
+      properties:
+        id: { type: string, format: uuid }
+        schoolId: { type: string, format: uuid }
+        admissionNumber: { type: string }
+        firstName: { type: string }
+        middleName: { type: string, nullable: true }
+        lastName: { type: string, nullable: true }
+        dateOfBirth: { type: string, format: date-time, nullable: true }
+        gender: { type: string, nullable: true }
+        admissionDate: { type: string, format: date-time }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+        archivedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        enrolments:
+          type: array
+          description: >
+            Same-school active placements matching the supplied academic filters.
+            Display placement only if this array contains exactly one entry.
+          items: { $ref: "#/components/schemas/Enrolment" }
+    Enrolment:
+      type: object
+      required: [id, schoolId, studentId, academicYearId, classId, sectionId, startDate, endDate, isActive, rollNumber, createdAt, academicYear, section]
+      properties:
+        id: { type: string, format: uuid }
+        schoolId: { type: string, format: uuid }
+        studentId: { type: string, format: uuid }
+        academicYearId: { type: string, format: uuid }
+        classId: { type: string, format: uuid }
+        sectionId: { type: string, format: uuid }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time, nullable: true }
+        isActive: { type: boolean, enum: [true] }
+        rollNumber: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        academicYear:
+          type: object
+          required: [id, name, startDate, endDate, status]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            startDate: { type: string, format: date-time }
+            endDate: { type: string, format: date-time }
+            status: { type: string }
+        section:
+          type: object
+          required: [id, name, code, class]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            code: { type: string }
+            class:
+              type: object
+              required: [id, name, code]
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+                code: { type: string }

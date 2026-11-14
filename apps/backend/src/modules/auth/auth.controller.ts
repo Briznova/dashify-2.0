@@ -23,6 +23,7 @@ import type { Request, Response } from "express";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { AuthenticatedRequest } from "../../common/interfaces/authenticated-request";
 import { ConfigService } from "@nestjs/config";
+import { Throttle } from "@nestjs/throttler";
 import {
   clearAuthCookies,
   REFRESH_COOKIE,
@@ -31,6 +32,7 @@ import {
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
 import { SelectSchoolDto } from "./dto/select-school.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import {
   AuthLoginResponseDto,
   AuthMembershipResponseDto,
@@ -100,6 +102,30 @@ export class AuthController {
   ): Promise<void> {
     await this.auth.logout(request.cookies?.[REFRESH_COOKIE]);
     clearAuthCookies(response, this.config);
+  }
+
+  @ApiCookieAuth("accessCookie")
+  @UseGuards(JwtAuthGuard)
+  @Post("change-password")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Header("Cache-Control", "no-store")
+  @ApiHeader({ name: "Origin", required: true })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiBody({ type: ChangePasswordDto })
+  @ApiNoContentResponse({
+    description: "Password changed; other sessions revoked",
+  })
+  @ApiOperation({ summary: "Change the current user's password" })
+  async changePassword(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<void> {
+    await this.auth.changePassword(
+      request.user.id,
+      request.user.sessionId,
+      dto,
+    );
   }
 
   @ApiCookieAuth("accessCookie")

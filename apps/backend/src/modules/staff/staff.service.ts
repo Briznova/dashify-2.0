@@ -6,14 +6,145 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import * as argon2 from "argon2";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { AssignTeacherDto } from "./dto/assign-teacher.dto";
 import { CreateStaffDto } from "./dto/create-staff.dto";
+import { CreateTeacherAccountDto } from "./dto/create-teacher-account.dto";
+import { CreateDepartmentDto, UpdateDepartmentDto } from "./dto/department.dto";
 import { UpdateStaffDto } from "./dto/update-staff.dto";
 
 @Injectable()
 export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async lockSchool(tx: Prisma.TransactionClient, schoolId: string) {
+    const schools = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM schools WHERE id = ${schoolId}::uuid AND is_active = true FOR UPDATE
+    `;
+    if (!schools.length) throw new NotFoundException("Active school not found");
+  }
+
+  async listDepartments(schoolId: string) {
+    return this.prisma.withTenant(schoolId, (tx) => tx.schoolDepartment.findMany({
+      where: { schoolId }, orderBy: { name: "asc" },
+      select: { id: true, name: true, isActive: true },
+    }));
+  }
+
+  async createDepartment(schoolId: string, actorId: string, dto: CreateDepartmentDto) {
+    try {
+      return await this.prisma.withTenant(schoolId, async (tx) => {
+        await this.lockSchool(tx, schoolId);
+        const department = await tx.schoolDepartment.create({
+          data: { schoolId, name: dto.name },
+          select: { id: true, name: true, isActive: true },
+        });
+        await tx.auditLog.create({ data: {
+          schoolId, actorUserId: actorId, action: "DEPARTMENT_CREATED",
+          resource: "school_department", resourceId: department.id,
+        } });
+        return department;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException("A department with this name already exists");
+      }
+      throw error;
+    }
+  }
+
+  async updateDepartment(schoolId: string, actorId: string, id: string, dto: UpdateDepartmentDto) {
+    if (dto.name === undefined && dto.isActive === undefined) {
+      throw new BadRequestException("At least one department field is required");
+    }
+    try {
+      return await this.prisma.withTenant(schoolId, async (tx) => {
+        await this.lockSchool(tx, schoolId);
+        const existing = await tx.schoolDepartment.findFirst({ where: { id, schoolId, isActive: true } });
+        if (!existing) throw new NotFoundException("Active department not found");
+        const department = await tx.schoolDepartment.update({
+          where: { id }, data: dto, select: { id: true, name: true, isActive: true },
+        });
+        await tx.auditLog.create({ data: {
+          schoolId, actorUserId: actorId, action: "DEPARTMENT_UPDATED",
+          resource: "school_department", resourceId: id,
+          summary: { changedFields: Object.keys(dto) },
+        } });
+        return department;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException("A department with this name already exists");
+      }
+      throw error;
+    }
+  }
+
+  async createTeacherAccount(schoolId: string, actorId: string, dto: CreateTeacherAccountDto) {
+    const passwordHash = await argon2.hash(dto.password);
+    try {
+      return await this.prisma.withTenant(schoolId, async (tx) => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${dto.email}))::text`;
+        await this.lockSchool(tx, schoolId);
+        const existing = await tx.user.findFirst({
+          where: { email: { equals: dto.email, mode: "insensitive" } }, select: { id: true },
+        });
+        if (existing) throw new ConflictException("An account already exists for this email");
+        if (dto.departmentId) {
+          const department = await tx.schoolDepartment.findFirst({
+            where: { id: dto.departmentId, schoolId, isActive: true }, select: { id: true },
+          });
+          if (!department) throw new NotFoundException("Active department not found");
+        }
+        const permissions = ["dashboard.teacher.read", "announcements.read"];
+        let role = await tx.role.findUnique({
+          where: { schoolId_key: { schoolId, key: "TEACHER" } },
+          include: { permissions: { include: { permission: { select: { key: true } } } } },
+        });
+        if (role) {
+          const keys = new Set(role.permissions.map(({ permission }) => permission.key));
+          if (!role.isSystem || keys.size !== permissions.length || !permissions.every((key) => keys.has(key))) {
+            throw new ConflictException("The school's Teacher role differs from the standard role");
+          }
+        } else {
+          role = await tx.role.create({
+            data: { schoolId, key: "TEACHER", name: "Teacher", isSystem: true },
+            include: { permissions: { include: { permission: { select: { key: true } } } } },
+          });
+          for (const key of permissions) {
+            const permission = await tx.permission.upsert({ where: { key }, create: { key }, update: {} });
+            await tx.rolePermission.create({ data: { roleId: role.id, permissionId: permission.id } });
+          }
+        }
+        const user = await tx.user.create({
+          data: { email: dto.email, passwordHash, firstName: dto.firstName, lastName: dto.lastName, phone: dto.phone },
+          select: { id: true, email: true, firstName: true, lastName: true },
+        });
+        await tx.schoolMembership.create({
+          data: { schoolId, userId: user.id, status: "ACTIVE", joinedAt: new Date(), roles: { create: { roleId: role.id } } },
+        });
+        const staff = await tx.staffProfile.create({
+          data: {
+            schoolId, userId: user.id, employeeCode: dto.employeeCode, firstName: dto.firstName,
+            lastName: dto.lastName, email: dto.email, phone: dto.phone, designation: "Teacher",
+            departmentId: dto.departmentId, joinedAt: new Date(), isActive: true,
+          },
+          include: { departmentRecord: { select: { id: true, name: true, isActive: true } } },
+        });
+        await tx.auditLog.create({ data: {
+          schoolId, actorUserId: actorId, action: "TEACHER_ACCOUNT_CREATED",
+          resource: "staff_profile", resourceId: staff.id, summary: { method: "administrator_set_password" },
+        } });
+        return { ...staff, user };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException("An account or employee code already exists");
+      }
+      throw error;
+    }
+  }
 
   async list(schoolId: string) {
     return this.prisma.withTenant(schoolId, async (tx) => {
@@ -21,6 +152,7 @@ export class StaffService {
         where: { schoolId, isActive: true },
         orderBy: [{ designation: "asc" }, { employeeCode: "asc" }],
         include: {
+          departmentRecord: { select: { id: true, name: true, isActive: true } },
           teacherAssignments: {
             where: { isActive: true },
             include: { class: true, section: true },
@@ -55,6 +187,7 @@ export class StaffService {
       const staff = await tx.staffProfile.findFirst({
         where: { id, schoolId },
         include: {
+          departmentRecord: { select: { id: true, name: true, isActive: true } },
           teacherAssignments: {
             where: { isActive: true },
             include: { class: true, section: true },
@@ -82,6 +215,17 @@ export class StaffService {
           throw new BadRequestException(
             "Provide either userId or accountEmail, not both",
           );
+        }
+        let departmentId: string | undefined;
+        if (dto.department !== undefined) {
+          if (typeof dto.department !== "string") throw new BadRequestException("Invalid department");
+          await this.lockSchool(tx, schoolId);
+          const department = await tx.schoolDepartment.findFirst({
+            where: { schoolId, isActive: true, name: { equals: dto.department.trim(), mode: "insensitive" } },
+            select: { id: true },
+          });
+          if (!department) throw new NotFoundException("Active department not found");
+          departmentId = department.id;
         }
 
         if (dto.employeeCode) {
@@ -140,11 +284,12 @@ export class StaffService {
             email: dto.email ?? user?.email,
             phone: dto.phone ?? user?.phone ?? null,
             employeeCode: dto.employeeCode,
-            designation: dto.designation,
-            department: dto.department,
+            designation: dto.designation ?? "Teacher",
+            departmentId,
             joinedAt: new Date(),
             isActive: true,
           },
+          include: { departmentRecord: { select: { id: true, name: true, isActive: true } } },
         });
 
         await tx.auditLog.create({
@@ -196,10 +341,30 @@ export class StaffService {
   ) {
     try {
       return await this.prisma.withTenant(schoolId, async (tx) => {
+        const { department, departmentId, ...fields } = dto;
+        if (department !== undefined && departmentId !== undefined) {
+          throw new BadRequestException("Provide either department or departmentId, not both");
+        }
+        if (department !== undefined || departmentId !== undefined) await this.lockSchool(tx, schoolId);
         const current = await tx.staffProfile.findFirst({
           where: { id, schoolId, isActive: true },
         });
         if (!current) throw new NotFoundException("Staff record not found");
+        let selectedDepartmentId = departmentId;
+        if (department !== undefined) {
+          if (typeof department !== "string") throw new BadRequestException("Invalid department");
+          const selected = await tx.schoolDepartment.findFirst({
+            where: { schoolId, isActive: true, name: { equals: department.trim(), mode: "insensitive" } },
+            select: { id: true },
+          });
+          if (!selected) throw new NotFoundException("Active department not found");
+          selectedDepartmentId = selected.id;
+        } else if (departmentId && departmentId !== current.departmentId) {
+          const selected = await tx.schoolDepartment.findFirst({
+            where: { id: departmentId, schoolId, isActive: true }, select: { id: true },
+          });
+          if (!selected) throw new NotFoundException("Active department not found");
+        }
 
         const changedFields = Object.keys(dto).filter(
           (key) => dto[key as keyof UpdateStaffDto] !== undefined,
@@ -227,7 +392,13 @@ export class StaffService {
 
         const updated = await tx.staffProfile.update({
           where: { id },
-          data: dto,
+          data: {
+            ...fields,
+            ...(department !== undefined || departmentId !== undefined
+              ? { departmentId: selectedDepartmentId, department: null }
+              : {}),
+          },
+          include: { departmentRecord: { select: { id: true, name: true, isActive: true } } },
         });
         await tx.auditLog.create({
           data: {

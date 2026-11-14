@@ -1,12 +1,16 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { validate } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
 import { PERMISSIONS_KEY } from '../common/decorators/permissions.decorator';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { AcademicController } from './academic/academic.controller';
 import { CreateAcademicYearDto } from './academic/dto/create-academic-year.dto';
 import { CreateClassDto } from './academic/dto/create-class.dto';
+import { CreateClassWithSectionDto } from './academic/dto/create-class-with-section.dto';
 import { CreateSectionDto } from './academic/dto/create-section.dto';
+import { UpdateClassDto } from './academic/dto/update-class.dto';
+import { UpdateSectionDto } from './academic/dto/update-section.dto';
 import { AttendanceController } from './attendance/attendance.controller';
 import { CreateAttendanceSessionDto } from './attendance/dto/create-session.dto';
 import { MarkRecordsDto } from './attendance/dto/mark-records.dto';
@@ -45,6 +49,11 @@ describe('Phase 4 controller permissions', () => {
     expect(routePermissions(AcademicController.prototype, 'createClass')).toEqual([
       'academic_structure.manage',
     ]);
+    expect(routePermissions(AcademicController.prototype, 'createClassWithSection')).toEqual([
+      'academic_structure.manage',
+    ]);
+    expect(routePermissions(AcademicController.prototype, 'updateClass')).toEqual(['academic_structure.manage']);
+    expect(routePermissions(AcademicController.prototype, 'updateSection')).toEqual(['academic_structure.manage']);
     expect(routePermissions(AcademicController.prototype, 'createSection')).toEqual([
       'academic_structure.manage',
     ]);
@@ -82,7 +91,7 @@ describe('Phase 4 controller permissions', () => {
 
   it('denies direct class and section creation without academic_structure.manage', () => {
     const guard = new PermissionsGuard(new Reflector());
-    for (const method of ['createClass', 'createSection'] as const) {
+    for (const method of ['createClass', 'createClassWithSection', 'createSection', 'updateClass', 'updateSection'] as const) {
       const handler = AcademicController.prototype[method];
       const context = (permissions: string[]) =>
         ({
@@ -102,6 +111,42 @@ describe('Phase 4 controller permissions', () => {
 });
 
 describe('Phase 4 request validation', () => {
+  it('validates complete class and section edits, including clearing capacity', async () => {
+    expect(await validate(plainToInstance(UpdateClassDto, { name: 'A', code: 'A', sortOrder: 0 }))).toHaveLength(0);
+    expect(await validate(plainToInstance(UpdateSectionDto, { name: 'A', code: 'A', capacity: null }))).toHaveLength(0);
+    expect((await validate(plainToInstance(UpdateClassDto, { name: 'A', code: 'A' }))).map((error) => error.property)).toContain('sortOrder');
+    expect((await validate(plainToInstance(UpdateSectionDto, { name: 'A', code: 'A' }))).map((error) => error.property)).toContain('capacity');
+    expect((await validate(plainToInstance(UpdateSectionDto, { name: 'A', code: 'A', capacity: 0 }))).map((error) => error.property)).toContain('capacity');
+  });
+
+  it('requires and validates the first section in combined creation', async () => {
+    const valid = plainToInstance(CreateClassWithSectionDto, {
+      name: 'Grade 1', code: 'G1', section: { name: 'A', code: 'A' },
+    });
+    expect(await validate(valid, { whitelist: true, forbidNonWhitelisted: true })).toHaveLength(0);
+    const missing = plainToInstance(CreateClassWithSectionDto, { name: 'Grade 1', code: 'G1' });
+    expect((await validate(missing)).map((error) => error.property)).toContain('section');
+    const invalid = plainToInstance(CreateClassWithSectionDto, {
+      name: 'Grade 1', code: 'G1', section: { name: '', code: 'A', capacity: 0 },
+    });
+    const errors = await validate(invalid);
+    expect(errors.find((error) => error.property === 'section')?.children?.map((error) => error.property))
+      .toEqual(expect.arrayContaining(['name', 'capacity']));
+    const array = plainToInstance(CreateClassWithSectionDto, {
+      name: 'Grade 1', code: 'G1', section: [{ name: 'A', code: 'A' }],
+    });
+    expect((await validate(array)).find((error) => error.property === 'section')?.constraints)
+      .toHaveProperty('isObject');
+    const extra = plainToInstance(CreateClassWithSectionDto, {
+      name: 'Grade 1', code: 'G1', schoolId: 'other-school',
+      section: { name: 'A', code: 'A', classId: 'other-class' },
+    });
+    const extraErrors = await validate(extra, { whitelist: true, forbidNonWhitelisted: true });
+    expect(extraErrors.map((error) => error.property)).toContain('schoolId');
+    expect(extraErrors.find((error) => error.property === 'section')?.children?.map((error) => error.property))
+      .toContain('classId');
+  });
+
   it('rejects invalid class and section creation fields', async () => {
     const classroom = Object.assign(new CreateClassDto(), {
       name: '',

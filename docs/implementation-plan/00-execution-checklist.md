@@ -178,6 +178,7 @@ Phase 3 implementation evidence (2026-11-12): 54 frontend tests, lint, TypeScrip
 - [x] Product approves all twelve remaining Phase 5 areas for prioritization (2026-11-13); this does not approve unresolved feature behavior, API contracts, permissions, or implementation details.
 - [x] Resolve the first staff-account slice using existing user accounts only; grant Teacher role only, defer invitations/credentials and other role grants, and preserve the global account on deactivation.
 - [x] Implement active-school staff profile create/update/deactivate, existing-account Teacher linkage, assignment cleanup, and audit events.
+- [x] Implement School Admin creation of new Teacher login accounts and linked staff profiles, plus school-specific department settings; apply the additive local migration with approval and verify login, authorization and isolation in an isolated database. See [staff spec](./05a-phase5-proposed-specs.md) and [staff contract](../api-contracts/staff.openapi.yaml).
 - [x] Update staff OpenAPI, implementation-plan baseline, and frontend staff management UI; verify school scoping and role behavior with focused tests.
 - [x] Product confirms release scope and priority for staff/teacher assignment.
 - [x] Implement the approved staff/teacher-assignment vertical slice across backend, permissions, and API-mode frontend integration.

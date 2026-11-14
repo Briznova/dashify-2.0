@@ -83,6 +83,11 @@ The auth adapter uses:
 
 API mode currently integrates active-school profile settings, academic years, classes and sections, student list/detail/create, attendance sessions, the School Admin current-count dashboard, the Principal daily attendance snapshot, and the Teacher assigned-class attendance dashboard. Other dashboard domains are not implemented by the backend yet; API mode surfaces those errors rather than falling back to preview data.
 
+Student creation uses a new API contract and database migration. Apply the
+backend migration and deploy the compatible backend before the frontend;
+coordinate existing clients because the create contract has changed. See the
+[student admission contract](../../docs/api-contracts/student-admission.openapi.yaml).
+
 The Principal snapshot requires a membership explicitly assigned the `PRINCIPAL` role, which receives the separate `dashboard.principal.read` permission. The migration and seed create the role and permission grant but do not assign an existing user to that role.
 
 The Teacher dashboard requires an explicitly assigned `TEACHER` workspace role and the separate `dashboard.teacher.read` permission. It also requires exactly one active staff profile linked to the authenticated user in the active school; the migration and seed do not assign the Teacher role to an existing membership.

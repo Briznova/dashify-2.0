@@ -1,10 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  ValidateIf,
 } from "class-validator";
 
 export class CreateStaffDto {
@@ -79,12 +81,13 @@ export class CreateStaffDto {
   phone?: string;
 
   @ApiPropertyOptional({
-    description: "Designation such as Teacher or Accountant.",
+    description: "Teacher is the only supported staff designation.",
     example: "Teacher",
     maxLength: 80,
   })
-  @IsOptional()
+  @ValidateIf((_object, value: unknown) => value !== undefined)
   @IsString()
+  @IsIn(["Teacher"])
   @MaxLength(80)
   designation?: string;
 
@@ -93,7 +96,7 @@ export class CreateStaffDto {
     example: "Mathematics",
     maxLength: 80,
   })
-  @IsOptional()
+  @ValidateIf((_object, value: unknown) => value !== undefined)
   @IsString()
   @MaxLength(80)
   department?: string;

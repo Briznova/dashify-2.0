@@ -141,7 +141,7 @@ const reports: WorkspaceNavigationItem = {
   capability: "reports",
 };
 
-const schoolAdminNavigation = [
+const schoolNavigation = [
   overview,
   students,
   staff,
@@ -186,14 +186,13 @@ export const rolePolicies = {
       "staff",
       "announcements",
       "classes",
-      "attendance",
       "fees",
       "academics",
       "analytics",
       "reports",
       "settings",
     ],
-    navigation: schoolAdminNavigation,
+    navigation: schoolNavigation.filter((item) => item.capability !== "attendance"),
     settingsEnabled: true,
   },
   principal: {
@@ -213,7 +212,7 @@ export const rolePolicies = {
       "reports",
       "settings",
     ],
-    navigation: schoolAdminNavigation,
+    navigation: schoolNavigation,
     settingsEnabled: true,
   },
   teacher: {

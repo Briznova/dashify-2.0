@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   UnauthorizedException,
@@ -10,6 +11,7 @@ import { createHash, randomBytes, randomUUID } from "crypto";
 import * as argon2 from "argon2";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { LoginDto } from "./dto/login.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import {
   platformGrantSelect,
   platformPermissionKeys,
@@ -87,14 +89,12 @@ export class AuthService {
         activeWorkspaceRole: null,
         permissionKeys: platformPermissionKeys(platformGrant),
       };
-      await this.prisma.refreshToken.create({
-        data: {
-          userId: user.id,
-          tokenHash: this.hashToken(refreshToken),
-          expiresAt: this.refreshExpiry(),
-          sessionId,
-          scope: AuthScope.PLATFORM,
-        },
+      await this.createLoginSession(user, {
+        userId: user.id,
+        tokenHash: this.hashToken(refreshToken),
+        expiresAt: this.refreshExpiry(),
+        sessionId,
+        scope: AuthScope.PLATFORM,
       });
       const accessToken = await this.createAccessToken(user, context);
       return {
@@ -110,14 +110,12 @@ export class AuthService {
 
     const sessionId = randomUUID();
     const refreshToken = this.newRefreshToken();
-    await this.prisma.refreshToken.create({
-      data: {
-        userId: user.id,
-        tokenHash: this.hashToken(refreshToken),
-        expiresAt: this.refreshExpiry(),
-        sessionId,
-        scope: AuthScope.SCHOOL_SELECTION,
-      },
+    await this.createLoginSession(user, {
+      userId: user.id,
+      tokenHash: this.hashToken(refreshToken),
+      expiresAt: this.refreshExpiry(),
+      sessionId,
+      scope: AuthScope.SCHOOL_SELECTION,
     });
 
     const context: SessionContext = {
@@ -276,6 +274,65 @@ export class AuthService {
     });
   }
 
+  async changePassword(
+    userId: string,
+    sessionId: string | undefined,
+    dto: ChangePasswordDto,
+  ): Promise<void> {
+    if (!sessionId) throw new UnauthorizedException();
+    const result = await this.prisma.$transaction(async (transaction) => {
+      await this.lockAuthSessions(transaction, userId);
+      const currentSession = await transaction.$queryRaw<{ id: string }[]>`
+        SELECT id FROM refresh_tokens
+        WHERE user_id = ${userId}::uuid AND session_id = ${sessionId}::uuid
+          AND revoked_at IS NULL AND expires_at > NOW()
+        FOR UPDATE
+      `;
+      const user = await transaction.user.findUnique({
+        where: { id: userId },
+        select: { isActive: true, passwordHash: true },
+      });
+      if (!currentSession.length || !user?.isActive)
+        throw new UnauthorizedException();
+      if (!(await argon2.verify(user.passwordHash, dto.currentPassword))) {
+        await transaction.auditLog.create({
+          data: {
+            actorUserId: userId,
+            action: "PASSWORD_CHANGE_FAILED",
+            resource: "user",
+            resourceId: userId,
+          },
+        });
+        return false;
+      }
+
+      const passwordHash = await argon2.hash(dto.newPassword);
+      await transaction.user.update({
+        where: { id: userId },
+        data: { passwordHash },
+      });
+      await transaction.refreshToken.updateMany({
+        where: {
+          userId,
+          revokedAt: null,
+          OR: [{ sessionId: { not: sessionId } }, { sessionId: null }],
+        },
+        data: { revokedAt: new Date() },
+      });
+      await transaction.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: "PASSWORD_CHANGED",
+          resource: "user",
+          resourceId: userId,
+        },
+      });
+      return true;
+    });
+    if (!result)
+      throw new BadRequestException("Current password is incorrect.");
+  }
+
   async selectSchool(
     userId: string,
     sessionId: string | undefined,
@@ -353,7 +410,9 @@ export class AuthService {
       select: { id: true },
     });
     if (scope === "platform" || platformGrant) {
-      throw new ForbiddenException("Platform sessions do not use school selection");
+      throw new ForbiddenException(
+        "Platform sessions do not use school selection",
+      );
     }
     const memberships = await this.activeMemberships(userId);
     return memberships.map((membership) => this.membershipSummary(membership));
@@ -574,9 +633,33 @@ export class AuthService {
 
   private refreshExpiry(): Date {
     return new Date(
-      Date.now() +
-        getAuthTokenTtls(this.config).refreshTokenTtlSeconds * 1000,
+      Date.now() + getAuthTokenTtls(this.config).refreshTokenTtlSeconds * 1000,
     );
+  }
+
+  private async lockAuthSessions(
+    transaction: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<void> {
+    // Serialize password changes with login session creation and refresh rotation.
+    await transaction.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"dashify:auth:" + userId}, 0))::text`;
+  }
+
+  private async createLoginSession(
+    user: { id: string; passwordHash: string },
+    data: Prisma.RefreshTokenUncheckedCreateInput,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (transaction) => {
+      await this.lockAuthSessions(transaction, user.id);
+      const current = await transaction.user.findUnique({
+        where: { id: user.id },
+        select: { isActive: true, passwordHash: true },
+      });
+      if (!current?.isActive || current.passwordHash !== user.passwordHash) {
+        throw new UnauthorizedException("Invalid email or password");
+      }
+      await transaction.refreshToken.create({ data });
+    });
   }
 
   private async rotateRefreshToken(
@@ -586,6 +669,7 @@ export class AuthService {
   ): Promise<void> {
     const now = new Date();
     const next = await this.prisma.$transaction(async (transaction) => {
+      await this.lockAuthSessions(transaction, existing.userId);
       const revoked = await transaction.refreshToken.updateMany({
         where: {
           id: existing.id,

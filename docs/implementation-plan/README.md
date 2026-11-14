@@ -33,6 +33,7 @@ The monorepo uses these links as the source of truth for coordinated feature wor
 | [Figma design reference](./07-figma-design-reference.md) | Figma file and frame links for role workspaces and related screens |
 | [Super Admin workspace LLD](./08-super-admin-workspace-lld.md) | Approved frontend previews and existing platform directory integration |
 | [Super Admin end-to-end spec](./09-super-admin-end-to-end-spec.md) | Approved school setup, CSV, support, audit and settings direction and remaining gates |
+| [Students end-to-end spec](./10-students-end-to-end-spec.md) | Draft screenshot-based student directory, records and phased delivery plan; decisions and contracts remain unapproved |
 | [Decision register](./decisions/README.md) | Open architecture/product decisions that block implementation |
 | [Feature spec template](./templates/feature-spec-template.md) | Required format for implementation-ready feature specs |
 | [Decision record template](./templates/decision-record-template.md) | Record decisions that affect contracts or architecture |

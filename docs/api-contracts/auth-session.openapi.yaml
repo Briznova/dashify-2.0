@@ -113,6 +113,39 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /auth/change-password:
+    post:
+      tags: [Authentication]
+      operationId: changePassword
+      summary: Change the authenticated user's password
+      description: >
+        Requires the current password and an active session. Preserves the
+        current session and revokes all other refresh sessions, including legacy
+        credentials without a session ID. Passwords are never included in audit
+        records. The endpoint is limited to five requests per IP per minute by
+        the application throttler.
+      security:
+        - accessCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: Password changed; other sessions revoked
+        "400":
+          description: Invalid input or incorrect current password
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /auth/me:
     get:
       tags: [Authentication]
@@ -277,6 +310,21 @@ components:
         type: string
       description: Must match the dashify_csrf cookie for state-changing requests.
   schemas:
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          minLength: 1
+        newPassword:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 1024
+          description: Passphrases are allowed; no character classes are required.
     LoginRequest:
       type: object
       additionalProperties: false

@@ -11,7 +11,7 @@ import type {
   CreateAcademicSectionInput,
   CreateAnnouncementInput,
   CreateAcademicYearInput,
-  CreateClassroomInput,
+  CreateClassroomWithSectionInput,
   CreateStaffInput,
   AcademicReport,
   Assignment,
@@ -30,10 +30,12 @@ import type {
   UpdateSchoolProfileInput,
   UpdateStaffInput,
   StaffMember,
+  StaffDepartment,
   Student,
   StudentCreateInput,
   StudentInput,
   StudentPage,
+  StudentDirectorySearch,
   TeacherDashboard,
 } from "@/types/school";
 
@@ -131,6 +133,18 @@ export function useStudentsPage(page: number, pageSize = 20) {
     [page, pageSize],
   );
   return useRemoteResource<StudentPage>(load);
+}
+
+export function useStudentDirectory(input: StudentDirectorySearch, enabled: boolean) {
+  const { page, pageSize, query, academicYearId, classId, sectionId, status } = input;
+  const load = useCallback(
+    (signal: AbortSignal) => schoolService.searchStudents(
+      { page, pageSize, query, academicYearId, classId, sectionId, status },
+      signal,
+    ),
+    [page, pageSize, query, academicYearId, classId, sectionId, status],
+  );
+  return useRemoteResource<StudentPage>(enabled ? load : null);
 }
 
 export function useStudent(id: string) {
@@ -256,6 +270,17 @@ export function useSaveStaff() {
   return { save, isPending, error };
 }
 
+export function useDepartments(schoolId: string | undefined, enabled = true) {
+  const load = useCallback(
+    (signal: AbortSignal) => {
+      if (!schoolId) throw new Error("Select a school to view its departments.");
+      return schoolService.getDepartments(signal);
+    },
+    [schoolId],
+  );
+  return useRemoteResource<StaffDepartment[]>(enabled && schoolId ? load : null);
+}
+
 export function useDeactivateStaff() {
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -281,19 +306,19 @@ export function useDeactivateStaff() {
   return { deactivate, isPending, error };
 }
 
-export function useClassrooms() {
+export function useClassrooms(enabled = true) {
   const load = useCallback((signal: AbortSignal) => schoolService.getClassrooms(signal), []);
-  return useRemoteResource<Classroom[]>(load);
+  return useRemoteResource<Classroom[]>(enabled ? load : null);
 }
 
-export function useCreateClassroom() {
+export function useCreateClassroomWithSection() {
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const create = useCallback(async (input: CreateClassroomInput) => {
+  const create = useCallback(async (input: CreateClassroomWithSectionInput) => {
     setIsPending(true);
     setError(null);
     try {
-      return await schoolService.createClassroom(input);
+      return await schoolService.createClassroomWithSection(input);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to create the class.");
       return null;
@@ -382,9 +407,9 @@ export function useAssignments(enabled = true) {
   return useRemoteResource<Assignment[]>(enabled ? load : null);
 }
 
-export function useAcademicYears() {
+export function useAcademicYears(enabled = true) {
   const load = useCallback((signal: AbortSignal) => schoolService.getAcademicYears(signal), []);
-  return useRemoteResource<AcademicYear[]>(load);
+  return useRemoteResource<AcademicYear[]>(enabled ? load : null);
 }
 
 export function useCreateAcademicYear() {

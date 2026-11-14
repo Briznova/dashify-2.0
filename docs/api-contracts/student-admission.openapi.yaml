@@ -1,0 +1,167 @@
+openapi: 3.0.3
+info:
+  title: DASHIFY Student Admission Contract
+  version: 1.0.0
+  description: >
+    Approved creation slice. Replaces the previous student creation request;
+    deploy the migration and backend before enabling the updated frontend.
+servers:
+  - url: http://localhost:3001/api/v1
+paths:
+  /students:
+    post:
+      operationId: admitStudent
+      summary: Create a student, guardians and initial placement
+      description: >
+        Requires students.create and an active-school session. School is
+        derived from the session. IDs use the school prefix, admission-date
+        calendar year and a school-wide annual sequence with at least four
+        digits. Occupied IDs are skipped. The transaction enforces capacity
+        and active roll uniqueness; it creates an ACTIVE student and writes a
+        redacted audit event. Guardian phone numbers use international format.
+      security: [{ accessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+        - $ref: "#/components/parameters/Csrf"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Admission" }
+      responses:
+        "201":
+          description: Created student with guardian links and initial enrolment.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "./student-directory.openapi.yaml#/components/schemas/Student"
+                  - type: object
+                    required: [address, emergencyContactKind, emergencyContactName, emergencyContactPhone, guardians]
+                    properties:
+                      address: { allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
+                      emergencyContactKind: { type: string, enum: [PRIMARY_GUARDIAN, OTHER] }
+                      emergencyContactName: { type: string, nullable: true }
+                      emergencyContactPhone: { type: string, nullable: true }
+                      guardians:
+                        type: array
+                        items:
+                          type: object
+                          required: [schoolId, studentId, guardianId, relationship, isPrimary, canPickup, guardian]
+                          properties:
+                            schoolId: { type: string, format: uuid }
+                            studentId: { type: string, format: uuid }
+                            guardianId: { type: string, format: uuid }
+                            relationship: { type: string }
+                            isPrimary: { type: boolean }
+                            canPickup: { type: boolean }
+                            guardian: { type: object, additionalProperties: true }
+        "400": { description: Invalid fields, guardian selection, dates or manual admission number }
+        "401": { description: Authentication required }
+        "403": { description: Missing permission or invalid Origin/CSRF }
+        "404": { description: Academic reference not found in the active school }
+        "409": { description: Section full, active roll already in use, or sequence exhausted }
+  /schools/current/admission-settings:
+    get:
+      operationId: getAdmissionSettings
+      summary: Get the active school's admission prefix
+      description: Requires active School Admin workspace and school.update.
+      security: [{ accessCookie: [] }]
+      responses:
+        "200":
+          description: Effective prefix, falling back to the school code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdmissionSettings" }
+        "401": { description: Authentication required }
+        "403": { description: School Admin workspace and school.update required }
+    patch:
+      operationId: updateAdmissionSettings
+      summary: Set the admission prefix without changing existing IDs
+      description: Requires active School Admin workspace and school.update.
+      security: [{ accessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+        - $ref: "#/components/parameters/Csrf"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdmissionSettings" }
+      responses:
+        "200":
+          description: Saved prefix
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdmissionSettings" }
+        "400": { description: Invalid prefix }
+        "401": { description: Authentication required }
+        "403": { description: Insufficient permission or invalid Origin/CSRF }
+components:
+  parameters:
+    Origin: { name: Origin, in: header, required: true, schema: { type: string } }
+    Csrf: { name: X-CSRF-Token, in: header, required: true, schema: { type: string } }
+  securitySchemes:
+    accessCookie: { type: apiKey, in: cookie, name: dashify_access }
+  schemas:
+    AdmissionSettings:
+      type: object
+      additionalProperties: false
+      required: [prefix]
+      properties:
+        prefix: { type: string, minLength: 2, maxLength: 32, pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$" }
+    Admission:
+      type: object
+      additionalProperties: false
+      required: [firstName, lastName, dateOfBirth, admissionDate, academicYearId, classId, sectionId, guardians, emergencyContact]
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 80 }
+        middleName: { type: string, maxLength: 80, nullable: true }
+        lastName: { type: string, minLength: 1, maxLength: 80 }
+        dateOfBirth: { type: string, format: date }
+        gender: { type: string, enum: [MALE, FEMALE, OTHER, PREFER_NOT_TO_SAY], nullable: true }
+        admissionDate: { type: string, format: date }
+        academicYearId: { type: string, format: uuid }
+        classId: { type: string, format: uuid }
+        sectionId: { type: string, format: uuid }
+        rollNumber: { type: string, minLength: 1, maxLength: 40, nullable: true }
+        address: { allOf: [{ $ref: "#/components/schemas/Address" }], nullable: true }
+        guardians:
+          type: array
+          minItems: 1
+          maxItems: 5
+          description: Exactly one guardian must be primary.
+          items: { $ref: "#/components/schemas/Guardian" }
+        emergencyContact:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [kind]
+              properties:
+                kind: { type: string, enum: [PRIMARY_GUARDIAN] }
+            - type: object
+              additionalProperties: false
+              required: [kind, name, phone]
+              properties:
+                kind: { type: string, enum: [OTHER] }
+                name: { type: string, minLength: 1, maxLength: 160 }
+                phone: { type: string }
+    Address:
+      type: object
+      additionalProperties: false
+      properties:
+        line1: { type: string, maxLength: 160, nullable: true }
+        city: { type: string, maxLength: 80, nullable: true }
+        state: { type: string, maxLength: 80, nullable: true }
+        postalCode: { type: string, maxLength: 20, nullable: true }
+    Guardian:
+      type: object
+      additionalProperties: false
+      required: [firstName, relationship, phone, isPrimary]
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 80 }
+        lastName: { type: string, maxLength: 80, nullable: true }
+        relationship: { type: string, enum: [FATHER, MOTHER, GUARDIAN, GRANDPARENT, OTHER] }
+        phone: { type: string }
+        email: { type: string, format: email, nullable: true }
+        isPrimary: { type: boolean }

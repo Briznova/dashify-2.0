@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsEmail, IsOptional, IsString, MaxLength } from "class-validator";
+import { IsEmail, IsIn, IsOptional, IsString, IsUUID, MaxLength, ValidateIf } from "class-validator";
 
 export class UpdateStaffDto {
   @ApiPropertyOptional({ maxLength: 20 })
@@ -33,14 +33,20 @@ export class UpdateStaffDto {
   phone?: string;
 
   @ApiPropertyOptional({ maxLength: 80 })
-  @IsOptional()
+  @ValidateIf((_object, value: unknown) => value !== undefined)
   @IsString()
+  @IsIn(["Teacher"])
   @MaxLength(80)
   designation?: string;
 
   @ApiPropertyOptional({ maxLength: 80 })
-  @IsOptional()
+  @ValidateIf((_object, value: unknown) => value !== undefined)
   @IsString()
   @MaxLength(80)
   department?: string;
+
+  @ApiPropertyOptional({ format: "uuid", nullable: true })
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string | null;
 }

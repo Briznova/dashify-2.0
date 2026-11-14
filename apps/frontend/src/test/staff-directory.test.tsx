@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   save: vi.fn(),
   deactivate: vi.fn(),
+  createTeacherAccount: vi.fn(),
   staff: [] as {
     id: string;
     name: string;
@@ -20,12 +21,12 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/services", () => ({
   isApiMode: true,
-  schoolService: {},
+  schoolService: { createTeacherAccount: mocks.createTeacherAccount },
 }));
 
 vi.mock("@/hooks/use-auth", () => ({
   useAuthSession: () => ({
-    session: { permissionKeys: ["staff.manage"] },
+    session: { scope: "school", activeWorkspaceRole: "school_admin", activeSchool: { id: "school-a" }, permissionKeys: ["staff.manage"] },
   }),
 }));
 
@@ -46,6 +47,10 @@ vi.mock("@/hooks/use-school-data", () => ({
     isPending: false,
     error: null,
   }),
+  useDepartments: () => ({
+    data: [{ id: "department-a", name: "Synthetic Department", isActive: true }],
+    isLoading: false, error: null, refresh: vi.fn(),
+  }),
 }));
 
 import { StaffDirectory } from "@/components/school-dashboard";
@@ -63,13 +68,14 @@ describe("StaffDirectory", () => {
       status: "Active",
     });
     mocks.deactivate.mockResolvedValue(true);
+    mocks.createTeacherAccount.mockResolvedValue({ id: "staff-1" });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("creates a staff profile and links only an existing Teacher account email", async () => {
+  it("creates a linked Teacher login and profile with the selected department", async () => {
     render(<StaffDirectory />);
 
     fireEvent.change(screen.getByLabelText("Employee code"), {
@@ -79,26 +85,49 @@ describe("StaffDirectory", () => {
       target: { value: "Taylor" },
     });
     fireEvent.change(
-      screen.getByLabelText("Existing teacher login email (optional)"),
+      screen.getByLabelText("Login email"),
       { target: { value: "taylor@example.test" } },
     );
-    fireEvent.change(screen.getByLabelText("Designation"), {
-      target: { value: "Teacher" },
+    fireEvent.change(screen.getByLabelText("Initial password"), {
+      target: { value: "Synthetic-password-123" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add staff" }));
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "Synthetic-password-123" },
+    });
+    fireEvent.change(screen.getByLabelText("Department (optional)"), {
+      target: { value: "department-a" },
+    });
+    expect(screen.getByLabelText("Designation")).toHaveValue("Teacher");
+    expect(screen.getAllByRole("option", { name: "Teacher" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Create Teacher account" }));
 
     await waitFor(() => {
-      expect(mocks.save).toHaveBeenCalledWith(
-        null,
+      expect(mocks.createTeacherAccount).toHaveBeenCalledWith(
         expect.objectContaining({
           employeeCode: "T-1",
           firstName: "Taylor",
-          accountEmail: "taylor@example.test",
-          designation: "Teacher",
+          email: "taylor@example.test",
+          password: "Synthetic-password-123",
+          departmentId: "department-a",
         }),
       );
     });
     expect(mocks.refresh).toHaveBeenCalled();
+    expect(screen.getByLabelText("Initial password")).toHaveValue("");
+    expect(screen.getByLabelText("Confirm password")).toHaveValue("");
+    expect(screen.getByRole("status")).toHaveTextContent("Teacher account created");
+  });
+
+  it("does not create an account when the passwords differ", async () => {
+    render(<StaffDirectory />);
+    fireEvent.change(screen.getByLabelText("Employee code"), { target: { value: "T-1" } });
+    fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Synthetic" } });
+    fireEvent.change(screen.getByLabelText("Login email"), { target: { value: "synthetic@example.test" } });
+    fireEvent.change(screen.getByLabelText("Initial password"), { target: { value: "Synthetic-password-123" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "Different-password-123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create Teacher account" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("passwords do not match");
+    expect(mocks.createTeacherAccount).not.toHaveBeenCalled();
   });
 
   it("requires confirmation before deactivating a staff profile", async () => {

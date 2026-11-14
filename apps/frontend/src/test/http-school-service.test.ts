@@ -14,6 +14,7 @@ const studentResponse = {
   status: "ACTIVE",
   enrolments: [
     {
+      isActive: true,
       academicYear: { id: "11111111-1111-4111-8111-111111111111", name: "2026-2027" },
       section: {
         id: "034b0bc2-cdc2-43cf-bf2a-b10ad7583857",
@@ -535,6 +536,55 @@ describe("HttpSchoolService.getClassrooms", () => {
     );
   });
 
+  it("posts a class and first section together and maps both", async () => {
+    const input = {
+      name: "Grade 8", code: "G8", sortOrder: 8,
+      section: { name: "Section A", code: "A", capacity: 30 },
+    };
+    const response = {
+      id: "class-1", name: input.name, code: input.code, sortOrder: 8, isActive: true,
+      sections: [{ id: "section-1", ...input.section, isActive: true }],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(response), { status: 201, headers: { "Content-Type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+    await expect(service.createClassroomWithSection(input)).resolves.toEqual(response);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://dashify.test/api/v1/classes/with-section",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(input), credentials: "include" }),
+    );
+  });
+
+  it("rejects combined creation responses missing the first section", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: "class-1", name: "Grade 8", code: "G8", sortOrder: 0, isActive: true, sections: [],
+    }), { status: 201, headers: { "Content-Type": "application/json" } })));
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+    await expect(service.createClassroomWithSection({
+      name: "Grade 8", code: "G8", section: { name: "A", code: "A" },
+    })).rejects.toMatchObject({ status: 502 });
+  });
+
+  it("sends class and section edits to their scoped endpoints", async () => {
+    const section = { id: "section-1", name: "Section A", code: "A", capacity: null, isActive: true };
+    const classroom = { id: "class-1", name: "Grade 8", code: "G8", sortOrder: 8, isActive: true, sections: [section] };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(classroom), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(section), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+    const classInput = { name: "Grade 8", code: "G8", sortOrder: 8 };
+    const sectionInput = { name: "Section A", code: "A", capacity: null };
+    await expect(service.updateClassroom("class-1", classInput)).resolves.toEqual(classroom);
+    await expect(service.updateAcademicSection("class-1", "section-1", sectionInput)).resolves.toEqual(section);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "https://dashify.test/api/v1/classes/class-1",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify(classInput), credentials: "include" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "https://dashify.test/api/v1/classes/class-1/sections/section-1",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify(sectionInput), credentials: "include" }));
+  });
+
   it("posts a section payload and maps the created section", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -687,6 +737,56 @@ describe("HttpSchoolService.getClassrooms", () => {
       });
   });
 
+  it("uses only one active placement for student detail and rejects missing placement status", async () => {
+    const active = studentResponse.enrolments[0];
+    const historical = { ...active, isActive: false, academicYear: { id: "old", name: "Old year" } };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...studentResponse, enrolments: [historical, active] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...studentResponse, enrolments: [historical] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...studentResponse, enrolments: [active, active] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...studentResponse, enrolments: [{ ...active, isActive: undefined }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+    await expect(service.getStudent(studentResponse.id)).resolves.toMatchObject({ academicYearName: "2026-2027", className: "Grade 8" });
+    await expect(service.getStudent(studentResponse.id)).resolves.toMatchObject({ academicYearName: null, className: null });
+    await expect(service.getStudent(studentResponse.id)).resolves.toMatchObject({ academicYearName: null, className: null });
+    await expect(service.getStudent(studentResponse.id)).rejects.toMatchObject({ status: 502 });
+  });
+
+  it("posts the new admission contract and maps saved contact and address data", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ...studentResponse,
+      emergencyContactKind: "OTHER", emergencyContactName: "Synthetic Contact",
+      emergencyContactPhone: "+14155552671", address: { city: "Synthetic City" },
+      guardians: [],
+    }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+    const input = {
+      firstName: "Synthetic", lastName: "Learner", dateOfBirth: "2016-01-01",
+      admissionDate: "2026-01-01", academicYearId: "year", classId: "class", sectionId: "section",
+      guardians: [{ firstName: "Synthetic Guardian", relationship: "GUARDIAN" as const, phone: "+14155552671", isPrimary: true }],
+      emergencyContact: { kind: "OTHER" as const, name: "Synthetic Contact", phone: "+14155552671" },
+      address: { city: "Synthetic City" },
+    };
+    await expect(service.admitStudent(input)).resolves.toMatchObject({
+      emergencyContact: input.emergencyContact, address: input.address,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://dashify.test/api/v1/students",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(input) }),
+    );
+  });
+
+  it("reports admission validation errors returned as an array", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ message: ["A guardian phone must be valid", "Date of birth is required"] }), { status: 400 },
+    )));
+    const client = new ApiClient("https://dashify.test/api/v1");
+    await expect(client.request("/students", { method: "POST", body: "{}" }))
+      .rejects.toMatchObject({ message: "A guardian phone must be valid Date of birth is required", status: 400 });
+  });
+
   it("requests and maps the backend staff directory to the dashboard contract", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -698,6 +798,7 @@ describe("HttpSchoolService.getClassrooms", () => {
             lastName: "Robinson",
             email: "mia.robinson@northstar.edu",
             phone: "+1-555-010-7788",
+            departmentId: null,
             employeeCode: "EMP-101",
             designation: "Math Teacher",
             department: "Mathematics",
@@ -725,12 +826,35 @@ describe("HttpSchoolService.getClassrooms", () => {
         firstName: "Mia",
         lastName: "Robinson",
         phone: "+1-555-010-7788",
+        departmentId: null,
       },
     ]);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://dashify.test/api/v1/staff",
       expect.objectContaining({ credentials: "include" }),
     );
+  });
+
+  it("uses the Teacher account and school department contracts", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "dept-1", name: "Synthetic", isActive: true }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: "staff-1", firstName: "Synthetic", email: "teacher@example.test",
+        designation: "Teacher", departmentId: "dept-1",
+        departmentRecord: { id: "dept-1", name: "Synthetic", isActive: true },
+      }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+    await expect(service.getDepartments()).resolves.toEqual([{ id: "dept-1", name: "Synthetic", isActive: true }]);
+    const input = {
+      firstName: "Synthetic", employeeCode: "T-1", email: "teacher@example.test",
+      password: "Synthetic-password-123", departmentId: "dept-1",
+    };
+    await expect(service.createTeacherAccount(input)).resolves.toMatchObject({
+      position: "Teacher", department: "Synthetic", departmentId: "dept-1",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "https://dashify.test/api/v1/staff/teacher-accounts",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(input) }));
   });
 
   it("creates a staff profile linked to an existing Teacher account", async () => {
@@ -789,7 +913,7 @@ describe("HttpSchoolService.getClassrooms", () => {
             lastName: "Robinson",
             email: "mia@example.test",
             employeeCode: "EMP-101",
-            designation: "Senior Teacher",
+            designation: "Teacher",
             department: "Mathematics",
             isActive: true,
           }),
@@ -806,15 +930,15 @@ describe("HttpSchoolService.getClassrooms", () => {
     const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
 
     await expect(
-      service.updateStaff("staff-1", { designation: "Senior Teacher" }),
-    ).resolves.toMatchObject({ position: "Senior Teacher" });
+      service.updateStaff("staff-1", { designation: "Teacher" }),
+    ).resolves.toMatchObject({ position: "Teacher" });
     await expect(service.deactivateStaff("staff-1")).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "https://dashify.test/api/v1/staff/staff-1",
       expect.objectContaining({
         method: "PATCH",
-        body: JSON.stringify({ designation: "Senior Teacher" }),
+        body: JSON.stringify({ designation: "Teacher" }),
       }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(

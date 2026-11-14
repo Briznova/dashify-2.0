@@ -11,6 +11,9 @@ import type {
   CreateAnnouncementInput,
   CreateAcademicYearInput,
   CreateClassroomInput,
+  CreateClassroomWithSectionInput,
+  UpdateClassroomInput,
+  UpdateAcademicSectionInput,
   CreateStaffInput,
   Assignment,
   AttendanceRecord,
@@ -341,6 +344,22 @@ export class MockSchoolService implements SchoolService {
     };
   }
 
+  searchStudents(): Promise<StudentPage> {
+    return Promise.reject(new Error("Student directory search is unavailable in preview mode."));
+  }
+
+  admitStudent(): Promise<Student> {
+    return Promise.reject(new Error("Student admissions are unavailable in preview mode."));
+  }
+
+  getAdmissionSettings(): Promise<{ prefix: string }> {
+    return Promise.reject(new Error("Admission settings are unavailable in preview mode."));
+  }
+
+  updateAdmissionSettings(): Promise<{ prefix: string }> {
+    return Promise.reject(new Error("Admission settings are unavailable in preview mode."));
+  }
+
   async getStudent(id: string, signal?: AbortSignal): Promise<Student> {
     await delay(signal);
     const student = students.find((item) => item.id === id);
@@ -504,6 +523,22 @@ export class MockSchoolService implements SchoolService {
     return { ...member };
   }
 
+  async createTeacherAccount(): Promise<StaffMember> {
+    throw new Error("Teacher login accounts require API mode.");
+  }
+
+  async getDepartments(): Promise<never> {
+    throw new Error("School department settings require API mode.");
+  }
+
+  async createDepartment(): Promise<never> {
+    throw new Error("School department settings require API mode.");
+  }
+
+  async updateDepartment(): Promise<never> {
+    throw new Error("School department settings require API mode.");
+  }
+
   async updateStaff(
     id: string,
     input: UpdateStaffInput,
@@ -558,6 +593,29 @@ export class MockSchoolService implements SchoolService {
     return classroom;
   }
 
+  async createClassroomWithSection(input: CreateClassroomWithSectionInput): Promise<Classroom> {
+    await delay();
+    if (classrooms.some((classroom) => classroom.code === input.code)) {
+      throw new Error("A class with this code already exists.");
+    }
+    const classroom: Classroom = {
+      id: `class-${Date.now()}`,
+      name: input.name,
+      code: input.code,
+      sortOrder: input.sortOrder ?? 0,
+      isActive: true,
+      sections: [{
+        id: `section-${Date.now()}`,
+        name: input.section.name,
+        code: input.section.code,
+        capacity: input.section.capacity ?? null,
+        isActive: true,
+      }],
+    };
+    classrooms.push(classroom);
+    return classroom;
+  }
+
   async createAcademicSection(
     input: CreateAcademicSectionInput,
   ): Promise<AcademicSection> {
@@ -575,6 +633,29 @@ export class MockSchoolService implements SchoolService {
       isActive: true,
     };
     classroom.sections.push(section);
+    return section;
+  }
+
+  async updateClassroom(id: string, input: UpdateClassroomInput): Promise<Classroom> {
+    await delay();
+    const classroom = classrooms.find((item) => item.id === id && item.isActive);
+    if (!classroom) throw new Error("This class could not be found.");
+    if (classrooms.some((item) => item.id !== id && item.code === input.code)) {
+      throw new Error("A class with this code already exists.");
+    }
+    Object.assign(classroom, input);
+    return classroom;
+  }
+
+  async updateAcademicSection(classId: string, sectionId: string, input: UpdateAcademicSectionInput): Promise<AcademicSection> {
+    await delay();
+    const classroom = classrooms.find((item) => item.id === classId && item.isActive);
+    const section = classroom?.sections.find((item) => item.id === sectionId && item.isActive);
+    if (!classroom || !section) throw new Error("This section could not be found.");
+    if (classroom.sections.some((item) => item.id !== sectionId && item.code === input.code)) {
+      throw new Error("A section with this code already exists for this class.");
+    }
+    Object.assign(section, input);
     return section;
   }
 

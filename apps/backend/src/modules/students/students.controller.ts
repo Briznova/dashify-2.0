@@ -2,6 +2,9 @@ import {
   Body,
   Controller,
   Get,
+  Header,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseIntPipe,
   ParseUUIDPipe,
@@ -11,13 +14,14 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { ApiBody, ApiCookieAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiBody, ApiCookieAuth, ApiCreatedResponse, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermissions } from "../../common/decorators/permissions.decorator";
 import { AuthenticatedRequest } from "../../common/interfaces/authenticated-request";
-import { CreateStudentDto } from "./dto/create-student.dto";
 import { UpdateStudentDto } from "./dto/update-student.dto";
+import { StudentDirectorySearchDto } from "./dto/student-directory-search.dto";
+import { CreateAdmissionDto } from "./dto/create-admission.dto";
 import { StudentsService } from "./students.service";
 
 @ApiTags("students")
@@ -43,6 +47,38 @@ export class StudentsController {
     return this.students.list(this.school(req), page, Math.min(pageSize, 100));
   }
 
+  @Post("search")
+  @HttpCode(HttpStatus.OK)
+  @Header("Cache-Control", "no-store")
+  @RequirePermissions("students.read")
+  @ApiOperation({ summary: "Search the active school's student directory" })
+  @ApiHeader({ name: "Origin", required: true })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiBody({ type: StudentDirectorySearchDto })
+  @ApiOkResponse({
+    description: "Matching students and pagination metadata",
+    schema: {
+      type: "object",
+      required: ["data", "meta"],
+      properties: {
+        data: { type: "array", items: { type: "object", additionalProperties: true } },
+        meta: {
+          type: "object",
+          required: ["page", "pageSize", "total", "totalPages"],
+          properties: {
+            page: { type: "integer" },
+            pageSize: { type: "integer" },
+            total: { type: "integer" },
+            totalPages: { type: "integer" },
+          },
+        },
+      },
+    },
+  })
+  search(@Req() req: AuthenticatedRequest, @Body() dto: StudentDirectorySearchDto) {
+    return this.students.search(this.school(req), dto);
+  }
+
   @Get(":id")
   @RequirePermissions("students.read")
   @ApiOperation({ summary: "Get a student by ID" })
@@ -56,49 +92,24 @@ export class StudentsController {
   @Post()
   @RequirePermissions("students.create")
   @ApiOperation({ summary: "Create a student and enrolment" })
-  @ApiBody({
-    type: CreateStudentDto,
-    examples: {
-      student: {
-        summary: "Create a student without guardians",
-        value: {
-          admissionNumber: "ADM-2026-001",
-          firstName: "Aarav",
-          lastName: "Sharma",
-          dateOfBirth: "2016-08-15",
-          gender: "MALE",
-          admissionDate: "2026-04-01",
-          academicYearId: "11111111-1111-4111-8111-111111111111",
-          classId: "22222222-2222-4222-8222-222222222222",
-          sectionId: "33333333-3333-4333-8333-333333333333",
-          guardians: [],
-        },
-      },
-      studentWithGuardian: {
-        summary: "Create a student with a guardian",
-        value: {
-          admissionNumber: "ADM-2026-002",
-          firstName: "Aarav",
-          lastName: "Sharma",
-          admissionDate: "2026-04-01",
-          academicYearId: "11111111-1111-4111-8111-111111111111",
-          classId: "22222222-2222-4222-8222-222222222222",
-          sectionId: "33333333-3333-4333-8333-333333333333",
-          guardians: [
-            {
-              firstName: "Priya",
-              lastName: "Sharma",
-              relationship: "MOTHER",
-              phone: "+919876543210",
-              email: "priya.sharma@example.test",
-              isPrimary: true,
-            },
-          ],
-        },
+  @ApiHeader({ name: "Origin", required: true })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiBody({ type: CreateAdmissionDto })
+  @ApiCreatedResponse({
+    description: "Created student with guardians and initial enrolment",
+    schema: {
+      type: "object",
+      required: ["id", "admissionNumber", "status", "guardians", "enrolments"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        admissionNumber: { type: "string" },
+        status: { type: "string", enum: ["ACTIVE"] },
+        guardians: { type: "array", items: { type: "object", additionalProperties: true } },
+        enrolments: { type: "array", items: { type: "object", additionalProperties: true } },
       },
     },
   })
-  create(@Req() req: AuthenticatedRequest, @Body() dto: CreateStudentDto) {
+  create(@Req() req: AuthenticatedRequest, @Body() dto: CreateAdmissionDto) {
     return this.students.create(this.school(req), req.user.id, dto);
   }
 

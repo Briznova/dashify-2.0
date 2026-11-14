@@ -1,6 +1,7 @@
 import type {
   AuthMembership,
   AuthSession,
+  ChangePasswordInput,
   SignInInput,
   UserRole,
 } from "@/types/auth";
@@ -114,6 +115,13 @@ export class HttpAuthService implements AuthService {
 
   resetPassword(): Promise<void> {
     return Promise.reject(unavailableFeature("Password reset"));
+  }
+
+  changePassword(input: ChangePasswordInput): Promise<void> {
+    return this.api.request("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   }
 
   signOut(): Promise<void> {

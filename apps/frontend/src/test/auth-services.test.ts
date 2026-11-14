@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "@/services/api-client";
 import { HttpAuthService } from "@/services/http/http-auth-service";
+import { MockAuthService } from "@/services/mock/mock-auth-service";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(status === 204 ? null : JSON.stringify(body), {
@@ -114,6 +115,23 @@ describe("HTTP auth service", () => {
       status: 501,
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("submits a password change with CSRF and does not refresh on incorrect current password", async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse({ message: "Current password is incorrect." }, 400));
+      const input = { currentPassword: "synthetic-old-password", newPassword: "synthetic-new-password" };
+      await expect(service.changePassword(input)).rejects.toMatchObject({ status: 400 });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchMock.mock.calls[0]!;
+      expect(url).toBe("http://localhost:3001/api/v1/auth/change-password");
+      expect(JSON.parse(String(options?.body))).toEqual(input);
+      expect(new Headers(options?.headers).get("X-CSRF-Token")).toBe("csrf-token");
+      fetchMock.mockResolvedValueOnce(jsonResponse(null, 204));
+      await expect(service.changePassword(input)).resolves.toBeUndefined();
+  });
+
+  it("does not simulate a password change in preview mode", async () => {
+      await expect(new MockAuthService().changePassword()).rejects.toThrow("unavailable in preview mode");
   });
 
   it("surfaces logout API failures", async () => {

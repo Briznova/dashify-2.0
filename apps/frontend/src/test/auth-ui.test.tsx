@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     selectSchool: vi.fn(),
     requestPasswordReset: vi.fn(),
     resetPassword: vi.fn(),
+    changePassword: vi.fn(),
     signOut: vi.fn(),
   },
   router: {
@@ -263,6 +264,38 @@ describe("auth session and workspace UI", () => {
     expect(screen.getByText("Dashboard content")).toBeInTheDocument();
   });
 
+  it("validates and changes the password from the account popup", async () => {
+    mocks.authService.getSession.mockResolvedValueOnce(session("school_admin"));
+    mocks.authService.changePassword
+      .mockRejectedValueOnce(new Error("Current password is incorrect."))
+      .mockResolvedValueOnce(undefined);
+
+    render(<DashboardShell><p>Dashboard content</p></DashboardShell>);
+    fireEvent.click(await screen.findByRole("button", { name: "Open Avery Johnson profile" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+    expect(screen.getByLabelText("Current password")).toHaveFocus();
+    fireEvent.change(screen.getByLabelText("Current password"), { target: { value: "synthetic-old-password" } });
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "synthetic-new-password" } });
+    fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "different-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("New passwords do not match.");
+    expect(mocks.authService.changePassword).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "synthetic-new-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Current password is incorrect.");
+    fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("other sessions have been signed out");
+    expect(mocks.authService.changePassword).toHaveBeenLastCalledWith({
+      currentPassword: "synthetic-old-password",
+      newPassword: "synthetic-new-password",
+    });
+    expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument();
+    expect(mocks.router.push).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Change password" })).toHaveFocus());
+  });
+
   it("shows integrated API navigation and hides unintegrated navigation and demo notifications", async () => {
     mocks.authService.getSession.mockResolvedValueOnce(
       session("school_admin", undefined, [
@@ -284,7 +317,7 @@ describe("auth session and workspace UI", () => {
     expect(screen.queryByText("23")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Students" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Classes" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "Attendance" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Attendance" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Academics" })).toBeVisible();
     expect(
       screen.queryByRole("link", { name: "Staff" }),

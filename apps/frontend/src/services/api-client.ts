@@ -117,6 +117,15 @@ export class ApiClient {
         typeof body.message === "string"
       ) {
         message = body.message;
+      } else if (
+        typeof body === "object" &&
+        body !== null &&
+        "message" in body &&
+        Array.isArray(body.message) &&
+        body.message.length > 0 &&
+        body.message.every((item: unknown) => typeof item === "string")
+      ) {
+        message = body.message.join(" ");
       }
     } catch (error) {
       if (!(error instanceof SyntaxError)) {

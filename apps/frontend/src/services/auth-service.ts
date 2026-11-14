@@ -1,5 +1,6 @@
 import type {
   AuthSession,
+  ChangePasswordInput,
   PasswordResetInput,
   SignInInput,
   SignUpInput,
@@ -12,5 +13,6 @@ export interface AuthService {
   selectSchool(schoolId: string, workspaceRole: string): Promise<AuthSession>;
   requestPasswordReset(email: string): Promise<{ previewToken?: string } | void>;
   resetPassword(input: PasswordResetInput): Promise<void>;
+  changePassword(input: ChangePasswordInput): Promise<void>;
   signOut(): Promise<void>;
 }

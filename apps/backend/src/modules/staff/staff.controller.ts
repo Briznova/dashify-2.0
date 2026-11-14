@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -24,8 +26,11 @@ import { RequirePermissions } from "../../common/decorators/permissions.decorato
 import { AuthenticatedRequest } from "../../common/interfaces/authenticated-request";
 import { AssignTeacherDto } from "./dto/assign-teacher.dto";
 import { CreateStaffDto } from "./dto/create-staff.dto";
+import { CreateTeacherAccountDto } from "./dto/create-teacher-account.dto";
+import { CreateDepartmentDto, UpdateDepartmentDto } from "./dto/department.dto";
 import { UpdateStaffDto } from "./dto/update-staff.dto";
 import { StaffService } from "./staff.service";
+import { Throttle } from "@nestjs/throttler";
 
 @ApiTags("staff")
 @ApiCookieAuth("accessCookie")
@@ -39,6 +44,47 @@ export class StaffController {
       throw new Error("Select an active school first");
     }
     return req.user.activeSchoolId;
+  }
+
+  private adminSchool(req: AuthenticatedRequest): string {
+    if (req.user.scope !== "school" || req.user.activeWorkspaceRole !== "school_admin" || !req.user.activeSchoolId) {
+      throw new ForbiddenException();
+    }
+    return req.user.activeSchoolId;
+  }
+
+  @Get("departments")
+  @RequirePermissions("staff.read")
+  @ApiOperation({ summary: "List departments in the active School Admin workspace" })
+  departments(@Req() req: AuthenticatedRequest) {
+    return this.staff.listDepartments(this.adminSchool(req));
+  }
+
+  @Post("departments")
+  @RequirePermissions("school.update")
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiOperation({ summary: "Create a school department" })
+  createDepartment(@Req() req: AuthenticatedRequest, @Body() dto: CreateDepartmentDto) {
+    return this.staff.createDepartment(this.adminSchool(req), req.user.id, dto);
+  }
+
+  @Patch("departments/:id")
+  @RequirePermissions("school.update")
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiOperation({ summary: "Rename or deactivate a school department" })
+  updateDepartment(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string, @Body() dto: UpdateDepartmentDto) {
+    return this.staff.updateDepartment(this.adminSchool(req), req.user.id, id, dto);
+  }
+
+  @Post("staff/teacher-accounts")
+  @Header("Cache-Control", "no-store")
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @RequirePermissions("staff.manage")
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiOperation({ summary: "Create a Teacher login and linked staff profile" })
+  @ApiBody({ type: CreateTeacherAccountDto })
+  createTeacher(@Req() req: AuthenticatedRequest, @Body() dto: CreateTeacherAccountDto) {
+    return this.staff.createTeacherAccount(this.adminSchool(req), req.user.id, dto);
   }
 
   @Get("staff")

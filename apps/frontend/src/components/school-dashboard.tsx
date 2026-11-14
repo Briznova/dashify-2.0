@@ -10,9 +10,9 @@ import {
   useAttendanceSessions,
   useAttendance,
   useClassrooms,
-  useCreateAcademicSection,
-  useCreateClassroom,
+  useCreateClassroomWithSection,
   useDeactivateStaff,
+  useDepartments,
   useSchoolOverview,
   useSchoolProfile,
   useSchoolSettings,
@@ -33,6 +33,9 @@ import { PageHeading } from "@/components/ui/page-heading";
 import { Panel } from "@/components/ui/panel";
 import { ResourceState } from "@/components/ui/resource-state";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ApiStudentsDirectory } from "@/components/students-directory";
+import { AdmissionSettings } from "@/components/admission-settings";
+import { DepartmentSettings } from "@/components/department-settings";
 import { downloadAttendanceReportCsv } from "@/lib/attendance-report-csv";
 import { isApiMode, schoolService } from "@/services";
 import type {
@@ -46,7 +49,6 @@ import type {
   SchoolOverview,
   SchoolRole,
   SchoolSettingsData,
-  CreateStaffInput,
   UpdateStaffInput,
   UpdateSchoolProfileInput,
   StaffMember,
@@ -177,7 +179,6 @@ function SchoolAdminWorkspace({ events, approvals }: { events: SchoolEvent[]; ap
             <strong>{lowAttendance.length} students need attendance follow-up</strong>
             <p>{lowAttendance.slice(0, 3).map((student) => `${student.name} (${student.attendance})`).join(" · ")}</p>
           </div>
-          <Link href="/dashboard/attendance">Review attendance <Icon name="arrowUpRight" size={14} /></Link>
         </section>
       )}
       {students.error && <ResourceState error={students.error} isLoading={false} onRetry={students.refresh} />}
@@ -185,7 +186,6 @@ function SchoolAdminWorkspace({ events, approvals }: { events: SchoolEvent[]; ap
         <DashboardPanel
           title="Today’s attendance"
           description="Daily attendance recorded across your school."
-          action={<Link href="/dashboard/attendance">Open attendance <Icon name="arrowUpRight" size={14} /></Link>}
         >
           <ResourceState error={attendance.error} isLoading={attendance.isLoading} onRetry={attendance.refresh} />
           {attendance.data && (
@@ -434,6 +434,10 @@ function DirectoryTable<T extends { id: string }>({
 }
 
 export function StudentsDirectory() {
+  return isApiMode ? <ApiStudentsDirectory /> : <PreviewStudentsDirectory />;
+}
+
+function PreviewStudentsDirectory() {
   const [page, setPage] = useState(1);
   const resource = useStudentsPage(page);
   const { session } = useAuthSession();
@@ -452,6 +456,11 @@ export function StudentsDirectory() {
 }
 
 export function StaffDirectory() {
+  const { session } = useAuthSession();
+  return <SchoolStaffDirectory key={session?.activeSchool?.id ?? "no-school"} />;
+}
+
+function SchoolStaffDirectory() {
   const resource = useStaff();
   const { session } = useAuthSession();
   const saveStaff = useSaveStaff();
@@ -462,10 +471,14 @@ export function StaffDirectory() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [accountEmail, setAccountEmail] = useState("");
-  const [designation, setDesignation] = useState("");
-  const [department, setDepartment] = useState("");
-  const canManage = Boolean(session?.permissionKeys.includes("staff.manage"));
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [created, setCreated] = useState(false);
+  const canManage = Boolean(session?.scope === "school" && session.activeWorkspaceRole === "school_admin" && session.permissionKeys.includes("staff.manage"));
+  const departments = useDepartments(session?.activeSchool?.id, isApiMode && canManage);
 
   function resetForm() {
     setEditing(null);
@@ -474,9 +487,10 @@ export function StaffDirectory() {
     setLastName("");
     setEmail("");
     setPhone("");
-    setAccountEmail("");
-    setDesignation("");
-    setDepartment("");
+    setPassword("");
+    setConfirmPassword("");
+    setDepartmentId("");
+    setCreateError(null);
   }
 
   function editStaff(row: StaffMember) {
@@ -486,29 +500,53 @@ export function StaffDirectory() {
     setLastName(row.lastName ?? "");
     setEmail(row.email);
     setPhone(row.phone ?? "");
-    setDesignation(row.position);
-    setDepartment(row.department);
-    setAccountEmail("");
+    setDepartmentId(row.departmentId ?? "");
+    setPassword("");
+    setConfirmPassword("");
+    setCreateError(null);
+    setCreated(false);
   }
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const input: CreateStaffInput | UpdateStaffInput = {
+    if (creating) return;
+    const input: UpdateStaffInput = {
       employeeCode: employeeCode.trim() || undefined,
       firstName: firstName.trim() || undefined,
       lastName: lastName.trim() || undefined,
       email: email.trim() || undefined,
       phone: phone.trim() || undefined,
-      designation: designation.trim() || undefined,
-      department: department.trim() || undefined,
-      ...(!editing && accountEmail.trim()
-        ? { accountEmail: accountEmail.trim() }
-        : {}),
+      designation: "Teacher",
+      departmentId: departmentId || null,
     };
-    const saved = await saveStaff.save(editing?.id ?? null, input);
-    if (!saved) return;
-    resetForm();
-    resource.refresh();
+    if (editing) {
+      const saved = await saveStaff.save(editing.id, input);
+      if (!saved) return;
+      resetForm();
+      resource.refresh();
+      return;
+    }
+    if (password !== confirmPassword) {
+      setCreateError("The passwords do not match.");
+      return;
+    }
+    setCreating(true);
+    setCreateError(null);
+    setCreated(false);
+    try {
+      await schoolService.createTeacherAccount({
+        employeeCode: employeeCode.trim(), firstName: firstName.trim(),
+        lastName: lastName.trim() || undefined, email: email.trim(), password,
+        phone: phone.trim() || undefined, departmentId: departmentId || undefined,
+      });
+      resetForm();
+      setCreated(true);
+      resource.refresh();
+    } catch (reason) {
+      setCreateError(reason instanceof Error ? reason.message : "Unable to create the Teacher account.");
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function handleDeactivate(row: StaffMember) {
@@ -555,23 +593,28 @@ export function StaffDirectory() {
       {isApiMode && canManage && (
         <div className={styles.createStructureForms}>
           <Panel
-            title={editing ? "Edit staff profile" : "Add staff"}
+            title={editing ? "Edit staff profile" : "Add Teacher"}
             description={editing
               ? "Update this active-school staff profile."
-              : "Create a staff profile. You may link an existing login account as a Teacher; new accounts and invitations are not available yet."}
+              : "Create a Teacher login and staff profile. Share the password securely; no invitation is sent."}
           >
             <form className={styles.createStructureForm} onSubmit={handleSave}>
               <label>Employee code<input value={employeeCode} onChange={(event) => setEmployeeCode(event.target.value)} maxLength={20} required={!editing} /></label>
               <label>First name<input value={firstName} onChange={(event) => setFirstName(event.target.value)} maxLength={80} required={!editing} /></label>
               <label>Last name<input value={lastName} onChange={(event) => setLastName(event.target.value)} maxLength={80} /></label>
-              <label>Contact email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} maxLength={160} /></label>
+              <label>{editing ? "Contact email" : "Login email"}<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} maxLength={160} required={!editing} /></label>
               <label>Phone<input value={phone} onChange={(event) => setPhone(event.target.value)} maxLength={30} /></label>
-              {!editing && <label>Existing teacher login email (optional)<input type="email" value={accountEmail} onChange={(event) => setAccountEmail(event.target.value)} maxLength={160} /></label>}
-              <label>Designation<input value={designation} onChange={(event) => setDesignation(event.target.value)} maxLength={80} /></label>
-              <label>Department<input value={department} onChange={(event) => setDepartment(event.target.value)} maxLength={80} /></label>
-              <button type="submit" disabled={saveStaff.isPending}>{saveStaff.isPending ? "Saving…" : editing ? "Save changes" : "Add staff"}</button>
+              {!editing && <label>Initial password<input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={12} maxLength={1024} required /></label>}
+              {!editing && <label>Confirm password<input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={12} maxLength={1024} required /></label>}
+              <label>Designation<select defaultValue="Teacher"><option value="Teacher">Teacher</option></select></label>
+              <label>Department (optional)<select value={departmentId} onChange={(event) => setDepartmentId(event.target.value)} disabled={!departments.data}><option value="">No department</option>{departments.data?.filter((item) => item.isActive || item.id === departmentId).map((item) => <option key={item.id} value={item.id}>{item.name}{!item.isActive ? " (inactive)" : ""}</option>)}</select></label>
+              <button type="submit" disabled={saveStaff.isPending || creating || !departments.data}>{saveStaff.isPending || creating ? "Saving…" : editing ? "Save changes" : "Create Teacher account"}</button>
               {editing && <button type="button" className={styles.outlineButton} onClick={resetForm}>Cancel</button>}
             </form>
+            <ResourceState isLoading={departments.isLoading} error={departments.error} onRetry={departments.refresh} />
+            <p><Link href="/dashboard/settings">Manage departments in Settings</Link>, or continue without one.</p>
+            {createError && <p className={styles.structureFormError} role="alert">{createError}</p>}
+            {created && <p role="status">Teacher account created. Share the initial password securely.</p>}
             {saveStaff.error && <p className={styles.structureFormError} role="alert">{saveStaff.error}</p>}
             {deactivateStaff.error && <p className={styles.structureFormError} role="alert">{deactivateStaff.error}</p>}
           </Panel>
@@ -585,24 +628,21 @@ export function StaffDirectory() {
 export function ClassroomsDirectory() {
   const resource = useClassrooms();
   const { session } = useAuthSession();
-  const createClassroom = useCreateClassroom();
-  const createSection = useCreateAcademicSection();
+  const createClassroom = useCreateClassroomWithSection();
   const [className, setClassName] = useState("");
   const [classCode, setClassCode] = useState("");
   const [sortOrder, setSortOrder] = useState("");
-  const [sectionClassId, setSectionClassId] = useState("");
-  const [sectionName, setSectionName] = useState("");
-  const [sectionCode, setSectionCode] = useState("");
-  const [capacity, setCapacity] = useState("");
+  const [firstSectionName, setFirstSectionName] = useState("");
+  const [firstSectionCode, setFirstSectionCode] = useState("");
+  const [firstSectionCapacity, setFirstSectionCapacity] = useState("");
   const canManage = Boolean(
     session?.permissionKeys.includes("academic_structure.manage"),
   );
   const columns: Column<Classroom>[] = [
-    { heading: "CLASS", render: (row) => <span className={styles.tablePerson}><strong className={styles.tableStrong}>{row.name}</strong><small>{row.code}</small></span> },
+    { heading: "CLASS", render: (row) => <span className={styles.tablePerson}><Link className={styles.studentLink} href={`/dashboard/classes/${encodeURIComponent(row.id)}`}>{row.name}</Link><small>{row.code}</small></span> },
     { heading: "SECTIONS", render: (row) => row.sections.length === 0 ? "—" : row.sections.map((section) => `${section.name} (${section.code})${section.capacity === null ? "" : ` · Capacity ${section.capacity}`}${section.isActive ? "" : " · Inactive"}`).join(", ") },
     { heading: "STATUS", render: (row) => <StatusBadge variant={row.isActive ? "success" : "warning"}>{row.isActive ? "Active" : "Inactive"}</StatusBadge> },
   ];
-  const activeClasses = (resource.data ?? []).filter((classroom) => classroom.isActive);
 
   async function handleCreateClass(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -610,55 +650,37 @@ export function ClassroomsDirectory() {
       name: className.trim(),
       code: classCode.trim(),
       sortOrder: sortOrder ? Number(sortOrder) : undefined,
+      section: {
+        name: firstSectionName.trim(),
+        code: firstSectionCode.trim(),
+        capacity: firstSectionCapacity ? Number(firstSectionCapacity) : undefined,
+      },
     });
     if (!classroom) return;
     setClassName("");
     setClassCode("");
     setSortOrder("");
-    setSectionClassId(classroom.id);
-    resource.refresh();
-  }
-
-  async function handleCreateSection(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const section = await createSection.create({
-      classId: sectionClassId,
-      name: sectionName.trim(),
-      code: sectionCode.trim(),
-      capacity: capacity ? Number(capacity) : undefined,
-    });
-    if (!section) return;
-    setSectionName("");
-    setSectionCode("");
-    setCapacity("");
+    setFirstSectionName("");
+    setFirstSectionCode("");
+    setFirstSectionCapacity("");
     resource.refresh();
   }
 
   return (
     <>
       {isApiMode && canManage && (
-        <div className={styles.createStructureForms}>
-          <Panel title="Create class" description="Add a class to the active school. Class codes must be unique within the school.">
+        <div className={styles.classCreateCard}>
+          <Panel title="Create class and first section" description="Add a class and its first section together. Class codes must be unique within the school.">
             <form className={styles.createStructureForm} onSubmit={handleCreateClass}>
               <label>Class name<input value={className} onChange={(event) => setClassName(event.target.value)} maxLength={80} required /></label>
               <label>Class code<input value={classCode} onChange={(event) => setClassCode(event.target.value)} maxLength={20} required /></label>
               <label>Sort order<input type="number" min="0" step="1" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} /></label>
-              <button type="submit" disabled={createClassroom.isPending}>{createClassroom.isPending ? "Creating…" : "Create class"}</button>
+              <label>First section name<input value={firstSectionName} onChange={(event) => setFirstSectionName(event.target.value)} maxLength={40} required /></label>
+              <label>First section code<input value={firstSectionCode} onChange={(event) => setFirstSectionCode(event.target.value)} maxLength={20} required /></label>
+              <label>First section capacity<input type="number" min="1" step="1" value={firstSectionCapacity} onChange={(event) => setFirstSectionCapacity(event.target.value)} /></label>
+              <button type="submit" disabled={createClassroom.isPending}>{createClassroom.isPending ? "Creating…" : "Create class and section"}</button>
             </form>
             {createClassroom.error && <p className={styles.structureFormError} role="alert">{createClassroom.error}</p>}
-          </Panel>
-          <Panel title="Create section" description="Add a section to an active class. Section codes must be unique within that class.">
-            <form className={styles.createStructureForm} onSubmit={handleCreateSection}>
-              <label>Class<select value={sectionClassId} onChange={(event) => setSectionClassId(event.target.value)} required>
-                <option value="">Select a class</option>
-                {activeClasses.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.name} ({classroom.code})</option>)}
-              </select></label>
-              <label>Section name<input value={sectionName} onChange={(event) => setSectionName(event.target.value)} maxLength={40} required /></label>
-              <label>Section code<input value={sectionCode} onChange={(event) => setSectionCode(event.target.value)} maxLength={20} required /></label>
-              <label>Capacity<input type="number" min="1" step="1" value={capacity} onChange={(event) => setCapacity(event.target.value)} /></label>
-              <button type="submit" disabled={createSection.isPending || !activeClasses.length}>{createSection.isPending ? "Creating…" : "Create section"}</button>
-            </form>
-            {createSection.error && <p className={styles.structureFormError} role="alert">{createSection.error}</p>}
           </Panel>
         </div>
       )}
@@ -1161,6 +1183,12 @@ function ApiSchoolSettings() {
             {canUpdate && <div className={styles.settingsSave}><span>{saved ? "School profile saved." : "Changes are saved to the active school."}</span><button type="submit" disabled={isPending}>{isPending ? "Saving..." : "Save changes"}</button></div>}
           </section>
         </form>
+      )}
+      {session?.scope === "school" && session.activeWorkspaceRole === "school_admin" && canUpdate && (
+        <>
+          <AdmissionSettings key={`admissions-${session.activeSchool?.id}`} />
+          {session.activeSchool?.id && session.permissionKeys.includes("staff.read") && <DepartmentSettings key={`departments-${session.activeSchool.id}`} schoolId={session.activeSchool.id} />}
+        </>
       )}
     </>
   );

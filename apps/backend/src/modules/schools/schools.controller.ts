@@ -1,10 +1,11 @@
 import { Body, Controller, ForbiddenException, Get, Header, Patch, Post, Req, UseGuards } from "@nestjs/common";
-import { ApiBody, ApiCookieAuth, ApiHeader, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiBody, ApiCookieAuth, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RequirePermissions } from "../../common/decorators/permissions.decorator";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { AuthenticatedRequest } from "../../common/interfaces/authenticated-request";
 import { UpdateSchoolDto } from "./dto/update-school.dto";
+import { UpdateAdmissionSettingsDto } from "./dto/update-admission-settings.dto";
 import { SchoolsService } from "./schools.service";
 
 @ApiTags("schools")
@@ -38,6 +39,26 @@ export class SchoolsController {
       throw new ForbiddenException();
     }
     return req.user.activeSchoolId;
+  }
+
+  @Get("current/admission-settings")
+  @Header("Cache-Control", "no-store")
+  @RequirePermissions("school.update")
+  @ApiOperation({ summary: "Read the active School Admin's admission ID prefix" })
+  @ApiOkResponse({ schema: { type: "object", required: ["prefix"], properties: { prefix: { type: "string" } } } })
+  admissionSettings(@Req() req: AuthenticatedRequest) {
+    return this.schools.getAdmissionSettings(this.onboardingSchool(req));
+  }
+
+  @Patch("current/admission-settings")
+  @Header("Cache-Control", "no-store")
+  @RequirePermissions("school.update")
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiBody({ type: UpdateAdmissionSettingsDto })
+  @ApiOperation({ summary: "Set the active School Admin's admission ID prefix" })
+  @ApiOkResponse({ schema: { type: "object", required: ["prefix"], properties: { prefix: { type: "string" } } } })
+  updateAdmissionSettings(@Req() req: AuthenticatedRequest, @Body() dto: UpdateAdmissionSettingsDto) {
+    return this.schools.updateAdmissionSettings(this.onboardingSchool(req), req.user.id, dto.prefix);
   }
 
   @Get("current/onboarding")

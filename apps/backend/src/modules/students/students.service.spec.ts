@@ -17,6 +17,7 @@ describe("StudentsService enrolments", () => {
   let service: StudentsService;
   let withTenant: jest.Mock;
   let transaction: {
+    $queryRaw: jest.Mock;
     student: {
       findMany: jest.Mock;
       count: jest.Mock;
@@ -38,6 +39,7 @@ describe("StudentsService enrolments", () => {
 
   beforeEach(() => {
     transaction = {
+      $queryRaw: jest.fn().mockResolvedValue([{ code: "TEST", admission_prefix: null }]),
       student: {
         findMany: jest.fn(),
         count: jest.fn(),
@@ -117,7 +119,7 @@ describe("StudentsService enrolments", () => {
       expect.objectContaining({
         where: { id: studentId, schoolId },
         include: {
-          guardians: { include: { guardian: true } },
+          guardians: { where: { schoolId, guardian: { is: { schoolId } } }, include: { guardian: true } },
           enrolments: expect.objectContaining({
             where: expect.objectContaining({ schoolId }),
           }),
@@ -178,14 +180,15 @@ describe("StudentsService enrolments", () => {
 
       await expect(
         service.create(schoolId, "actor-1", {
-          admissionNumber: "ADM-001",
-          firstName: "Aarav",
-          lastName: "Sharma",
+          firstName: "Synthetic",
+          lastName: "Student",
+          dateOfBirth: "2016-01-01",
           admissionDate: "2026-04-01",
           academicYearId: "year-1",
           classId: "class-1",
           sectionId: "section-1",
-          guardians: [],
+          guardians: [{ firstName: "Synthetic", relationship: GuardianRelationship.GUARDIAN, phone: "+14155552671", isPrimary: true }],
+          emergencyContact: { kind: "PRIMARY_GUARDIAN" },
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
 

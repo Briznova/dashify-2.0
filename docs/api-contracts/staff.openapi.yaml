@@ -2,12 +2,152 @@ openapi: 3.1.0
 info:
   title: Dashify Staff API
   version: 1.0.0
-  description: School-scoped staff profiles, existing-account linkage, and teacher assignments.
+  description: School-scoped staff profiles, Teacher account creation, departments, and teacher assignments.
 servers:
   - url: /api/v1
 security:
   - accessCookie: []
 paths:
+  /staff/teacher-accounts:
+    post:
+      operationId: createTeacherAccount
+      summary: Create a new Teacher login and linked staff profile
+      x-required-permission: staff.manage
+      x-required-workspace: school_admin
+      x-tenant-scope: authenticated active school
+      description: >
+        Creates a new global user, active membership, standard Teacher role, and
+        staff profile atomically. Existing email addresses are rejected
+        case-insensitively. The administrator sets the initial password; no
+        invitation, delivery, email verification, or forced password change is
+        provided. The password is not returned or included in the audit.
+        The optional department must be active and belong to this school.
+      parameters:
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTeacherAccount"
+      responses:
+        "201":
+          description: Created staff profile and non-secret user details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Active school or department not found
+        "409":
+          description: Existing account, duplicate employee code, or nonstandard Teacher role
+        "429":
+          description: Rate limit exceeded
+  /departments:
+    get:
+      operationId: listDepartments
+      summary: List active and inactive departments in the active school
+      x-required-permission: staff.read
+      x-required-workspace: school_admin
+      responses:
+        "200":
+          description: School departments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Department"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createDepartment
+      summary: Add a department in the active school
+      x-required-permission: school.update
+      x-required-workspace: school_admin
+      parameters:
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+      responses:
+        "201":
+          description: Created department
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Department"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Department name already exists, ignoring case
+  /departments/{id}:
+    patch:
+      operationId: updateDepartment
+      summary: Rename or deactivate an active department
+      x-required-permission: school.update
+      x-required-workspace: school_admin
+      description: Deactivation retains existing staff assignments; inactive departments cannot be assigned to new staff.
+      parameters:
+        - $ref: "#/components/parameters/StaffId"
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                isActive:
+                  const: false
+      responses:
+        "200":
+          description: Updated department
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Department"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Active department not found in the active school
+        "409":
+          description: Department name already exists, ignoring case
   /staff:
     get:
       operationId: listStaff
@@ -40,7 +180,8 @@ paths:
         creates a membership when none exists and grants only this school's Teacher
         role. Existing suspended, revoked, or invited memberships are rejected. It
         does not create a login, invite a user, or set credentials. Do not send both
-        userId and accountEmail.
+        userId and accountEmail. If supplied, department must match an active
+        department in the active school; designation must be Teacher.
       requestBody:
         required: true
         content:
@@ -216,6 +357,49 @@ components:
         type: string
         format: uuid
   schemas:
+    Department:
+      type: object
+      required: [id, name, isActive]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        isActive:
+          type: boolean
+    CreateTeacherAccount:
+      type: object
+      additionalProperties: false
+      required: [employeeCode, firstName, email, password]
+      properties:
+        employeeCode:
+          type: string
+          minLength: 1
+          maxLength: 20
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        email:
+          type: string
+          format: email
+          maxLength: 160
+        password:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 1024
+        phone:
+          type: string
+          maxLength: 30
+        departmentId:
+          type: string
+          format: uuid
     CreateStaff:
       type: object
       required: [employeeCode, firstName]
@@ -247,10 +431,11 @@ components:
           maxLength: 30
         designation:
           type: string
-          maxLength: 80
+          enum: [Teacher]
         department:
           type: string
           maxLength: 80
+          description: Name of an active department in the active school, matched case-insensitively.
     UpdateStaff:
       type: object
       minProperties: 1
@@ -273,10 +458,15 @@ components:
           maxLength: 30
         designation:
           type: string
-          maxLength: 80
+          enum: [Teacher]
         department:
           type: string
           maxLength: 80
+          description: Active department name; mutually exclusive with departmentId.
+        departmentId:
+          type: [string, "null"]
+          format: uuid
+          description: Active department ID, current inactive department ID, or null to clear.
     StaffProfile:
       type: object
       required: [id, schoolId, userId, employeeCode, firstName, isActive]
@@ -304,6 +494,14 @@ components:
           type: [string, "null"]
         department:
           type: [string, "null"]
+          description: Legacy free-text value, if present.
+        departmentId:
+          type: [string, "null"]
+          format: uuid
+        departmentRecord:
+          oneOf:
+            - $ref: "#/components/schemas/Department"
+            - type: "null"
         isActive:
           type: boolean
         user:

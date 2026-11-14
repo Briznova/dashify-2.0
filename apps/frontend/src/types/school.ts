@@ -101,6 +101,32 @@ export type Student = {
   sectionName?: string | null;
   sectionId?: string | null;
   guardians?: StudentGuardian[];
+  address?: StudentAddress | null;
+  emergencyContact?: { kind: "PRIMARY_GUARDIAN" } | { kind: "OTHER"; name: string; phone: string } | null;
+  rollNumber?: string | null;
+};
+
+export type StudentAddress = {
+  line1?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+};
+
+export type StudentAdmissionInput = {
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  dateOfBirth: string;
+  gender?: "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY";
+  admissionDate: string;
+  academicYearId: string;
+  classId: string;
+  sectionId: string;
+  guardians: StudentGuardianInput[];
+  emergencyContact: { kind: "PRIMARY_GUARDIAN" } | { kind: "OTHER"; name: string; phone: string };
+  address?: StudentAddress;
+  rollNumber?: string;
 };
 
 export type StudentGuardian = {
@@ -120,6 +146,16 @@ export type StudentPage = {
     total: number;
     totalPages: number;
   };
+};
+
+export type StudentDirectorySearch = {
+  page: number;
+  pageSize: number;
+  query?: string;
+  academicYearId?: string;
+  classId?: string;
+  sectionId?: string;
+  status?: "ACTIVE" | "INACTIVE";
 };
 
 export type StudentGuardianInput = {
@@ -230,6 +266,23 @@ export type StaffMember = {
   firstName?: string;
   lastName?: string | null;
   phone?: string | null;
+  departmentId?: string | null;
+};
+
+export type StaffDepartment = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
+export type CreateTeacherAccountInput = {
+  employeeCode: string;
+  firstName: string;
+  lastName?: string;
+  email: string;
+  password: string;
+  phone?: string;
+  departmentId?: string;
 };
 
 export type CreateStaffInput = {
@@ -243,7 +296,9 @@ export type CreateStaffInput = {
   accountEmail?: string;
 };
 
-export type UpdateStaffInput = Partial<Omit<CreateStaffInput, "accountEmail">>;
+export type UpdateStaffInput = Partial<Omit<CreateStaffInput, "accountEmail">> & {
+  departmentId?: string | null;
+};
 
 export type Classroom = {
   id: string;
@@ -257,6 +312,8 @@ export type Classroom = {
 export type CreateClassroomInput = Pick<Classroom, "name" | "code"> & {
   sortOrder?: number;
 };
+
+export type UpdateClassroomInput = Pick<Classroom, "name" | "code" | "sortOrder">;
 
 export type AcademicSection = {
   id: string;
@@ -273,6 +330,12 @@ export type CreateAcademicSectionInput = Pick<
   classId: string;
   capacity?: number;
 };
+
+export type CreateClassroomWithSectionInput = CreateClassroomInput & {
+  section: Omit<CreateAcademicSectionInput, "classId">;
+};
+
+export type UpdateAcademicSectionInput = Pick<AcademicSection, "name" | "code" | "capacity">;
 
 export type School = {
   id: string;
