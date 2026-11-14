@@ -25,6 +25,26 @@ describe("platform directory integration", () => {
   beforeEach(() => { auth.session = null; });
   afterEach(() => vi.unstubAllGlobals());
 
+  it.each([
+    [false, ["platform.schools.read", "platform.schools.create"], false],
+    [false, ["platform.schools.read", "platform.school-admins.create"], false],
+    [false, ["platform.schools.read", "platform.schools.create", "platform.school-admins.create"], true],
+    [true, ["platform.schools.read", "platform.schools.create"], false],
+    [true, ["platform.schools.read", "platform.school-admins.create"], false],
+    [true, ["platform.schools.read", "platform.schools.create", "platform.school-admins.create"], true],
+  ])("shows the combined creation entry only with both grants (overview: %s)", async (overview, permissionKeys, available) => {
+    auth.session = { scope: "platform", user: { role: "super_admin", id: "operator" }, permissionKeys };
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => Promise.resolve(new Response(
+      JSON.stringify(url.endsWith("/onboarding-summary") ? { notStarted: 0, completed: 0, unknown: 0 } : []), { status: 200 },
+    ))));
+    render(<PlatformSchoolsDirectory overview={overview} />);
+    await screen.findByText("No records match your search.");
+    const link = screen.queryByRole("link", { name: "Create school and admin" });
+    if (available) expect(link).toHaveAttribute("href", "/dashboard/schools/new");
+    else expect(link).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Create School Admin" })).not.toBeInTheDocument();
+  });
+
   it("loads the unresolved support count only with the support read grant and allows retry", async () => {
     auth.session = { scope: "platform", user: { role: "super_admin", id: "operator" }, permissionKeys: ["platform.support.read"] };
     const fetchMock = vi.fn().mockImplementation((url: string) => {

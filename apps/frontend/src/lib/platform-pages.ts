@@ -9,10 +9,6 @@ export const platformPages = {
     title: "Invitation status",
     description: "Follow the school administrator invitation and onboarding process.",
   },
-  "school-detail": {
-    title: "School detail",
-    description: "Review a school's account, subscription and onboarding progress.",
-  },
   subscriptions: {
     title: "Subscriptions",
     description: "Monitor school subscriptions, trials and upcoming renewals.",
@@ -52,8 +48,8 @@ export const platformPages = {
     icon: "settings",
   },
   "school-setup": {
-    title: "School setup and CSV import",
-    description: "Plan the setup and bulk import workflow for a school.",
+    title: "School setup",
+    description: "Review the school administrator setup workflow.",
     icon: "building",
   },
 } satisfies Record<string, { title: string; description: string; icon?: IconName }>;

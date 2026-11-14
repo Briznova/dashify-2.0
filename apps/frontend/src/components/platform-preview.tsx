@@ -87,29 +87,11 @@ function PreviewContent({ page }: { page: PlatformPage }) {
         <div className={styles.columns}>
           <Panel title="Invitation overview" description="No invitation has been created or sent.">
             <p className={styles.empty}>Invitation details are not connected.</p>
-            <PreviewLink page="create-school-admin">{isApiMode ? "Create a School Admin" : "Create another admin preview"}</PreviewLink>
+            {isApiMode && <Link className={styles.link} href="/dashboard/schools/new">Create a school and administrator &rarr;</Link>}
           </Panel>
           <Panel title="Invitation and onboarding">
             <Steps items={["Account created", "Password setup email sent", "Administrator sets password", "First login and school onboarding", "Onboarding complete"]} />
           </Panel>
-        </div>
-      );
-    case "school-detail":
-      return (
-        <div className={styles.columns}>
-          <Panel title="School account" description="Account and subscription information">
-            <dl className={styles.details}>
-              <dt>School</dt><dd>Example School</dd>
-              <dt>Tenant ID</dt><dd>Not connected</dd>
-              <dt>Subscription</dt><dd>Not connected</dd>
-              <dt>Location and time zone</dt><dd>Not connected</dd>
-            </dl>
-            <DisabledAction>Edit account details</DisabledAction>
-          </Panel>
-          <Panel title="Onboarding progress">
-            <Steps items={["Password setup and first login", "School profile and academic setup", "Team and access configuration"]} />
-          </Panel>
-          <Panel title="Recent account activity"><p className={styles.empty}>Activity is not connected.</p></Panel>
         </div>
       );
     case "subscriptions":
@@ -204,15 +186,11 @@ function PreviewContent({ page }: { page: PlatformPage }) {
     case "school-setup":
       return (
         <div className={styles.columns}>
-          <Panel title="School setup" description="A proposed workflow for provisioning a school.">
+          <Panel title="School setup" description="A proposed workflow for school administrator onboarding.">
             <Steps items={isApiMode
               ? ["Set up the school profile", "Configure academic years, classes and sections", "Review onboarding"]
               : ["Create or invite a School Admin", "Set up the school profile", "Configure academic years, classes and sections", "Review onboarding"]} />
-            <PreviewLink page="create-school-admin">{isApiMode ? "Create a School Admin" : "Preview administrator invitation"}</PreviewLink>
-          </Panel>
-          <Panel title="CSV bulk import" description="Templates, validation and import operations are not connected.">
-            <Steps items={["Select a school and data type", "Download a template", "Upload and validate rows", "Review and confirm", "Review results and errors"]} />
-            <div className={styles.actions}><DisabledAction>Download template</DisabledAction><DisabledAction>Upload CSV</DisabledAction></div>
+            {isApiMode && <Link className={styles.link} href="/dashboard/schools/new">Create a school and administrator &rarr;</Link>}
           </Panel>
         </div>
       );
@@ -226,7 +204,7 @@ export function PlatformPreview({ page }: { page: PlatformPage }) {
       <PageHeading eyebrow="PLATFORM ADMINISTRATION" title={title} description={description} />
       <div className={styles.warning} role="status">
         {page === "school-setup" && isApiMode
-          ? <><strong>Setup preview.</strong> CSV import remains unavailable. The School Admin creation link opens the connected account form.</>
+          ? <><strong>Setup preview.</strong> The creation link opens the connected school and administrator flow; the remaining setup steps are illustrative.</>
           : <><strong>Dummy page — not connected.</strong> This is a design preview, not actual platform data. Actions are unavailable.</>}
       </div>
       <PreviewContent page={page} />

@@ -2,18 +2,19 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isDashboardRouteAllowed } from "@/lib/access-policy";
 
-const mocks = vi.hoisted(() => ({ usePlatformSchool: vi.fn(), refresh: vi.fn() }));
+const mocks = vi.hoisted(() => ({ usePlatformSchool: vi.fn(), useAuthSession: vi.fn(), refresh: vi.fn() }));
 vi.mock("@/hooks/use-school-data", () => ({
   usePlatformSchool: mocks.usePlatformSchool,
 }));
 vi.mock("@/services", () => ({ isApiMode: true }));
-vi.mock("@/hooks/use-auth", () => ({ useAuthSession: () => ({ session: null }) }));
+vi.mock("@/hooks/use-auth", () => ({ useAuthSession: mocks.useAuthSession }));
 
 import { PlatformSchoolDetail } from "@/components/platform-school-detail";
 
 describe("platform school directory detail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.useAuthSession.mockReturnValue({ session: null });
     mocks.usePlatformSchool.mockReturnValue({
       data: { id: "school-2", name: "Other School", code: "OTHER", isActive: false, createdAt: "2026-01-02T00:00:00.000Z", onboardingState: "NOT_STARTED" },
       isLoading: false,
@@ -44,9 +45,23 @@ describe("platform school directory detail", () => {
       data: { id: "school-2", name: "Other School", code: "OTHER", isActive: true, createdAt: "2026-01-02T00:00:00.000Z", onboardingState: null },
       isLoading: false, error: null, refresh: mocks.refresh,
     });
+
     render(<PlatformSchoolDetail schoolId="school-2" />);
     expect(screen.getByText(/onboarding state is not recorded/i)).toBeInTheDocument();
     expect(screen.queryByText(/Not started/)).not.toBeInTheDocument();
+  });
+
+  it("allows an authorized operator to recover administrator creation for an active school", () => {
+    mocks.usePlatformSchool.mockReturnValue({
+      data: { id: "school-2", name: "Other School", code: "OTHER", isActive: true, createdAt: "2026-01-02T00:00:00.000Z", onboardingState: "NOT_STARTED" },
+      isLoading: false, error: null, refresh: mocks.refresh,
+    });
+    mocks.useAuthSession.mockReturnValue({
+      session: { scope: "platform", user: { role: "super_admin" }, permissionKeys: ["platform.schools.read", "platform.school-admins.create"] },
+    });
+    render(<PlatformSchoolDetail schoolId="school-2" />);
+    expect(screen.getByRole("link", { name: /create school admin/i }))
+      .toHaveAttribute("href", "/dashboard/platform/create-school-admin?id=school-2");
   });
 
   it("shows failures and retries without showing stale school data", () => {

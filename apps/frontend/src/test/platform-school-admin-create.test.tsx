@@ -10,6 +10,7 @@ vi.mock("@/hooks/use-auth", () => ({ useAuthSession: () => ({ session: mocks.ses
 vi.mock("@/hooks/use-school-data", () => ({ usePlatformSchools: () => ({ data: mocks.schools, isLoading: false, error: null }) }));
 vi.mock("@/services", () => ({ isApiMode: true, schoolAdminService: { create: mocks.create } }));
 import { PlatformSchoolAdminCreate } from "@/components/platform-school-admin-create";
+import { PlatformPreview } from "@/components/platform-preview";
 
 describe("school administrator creation", () => {
   beforeEach(() => {
@@ -40,5 +41,11 @@ describe("school administrator creation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Default password is not configured");
     expect(screen.queryByText(/Account created for/)).not.toBeInTheDocument();
+  });
+  it("links setup to the combined school and admin flow without an import preview", () => {
+    render(<PlatformPreview page="school-setup" />);
+    expect(screen.getByRole("link", { name: /create a school and administrator/i })).toHaveAttribute("href", "/dashboard/schools/new");
+    expect(screen.getByRole("status")).toHaveTextContent("setup steps are illustrative");
+    expect(screen.queryByText(/csv|bulk import/i)).not.toBeInTheDocument();
   });
 });

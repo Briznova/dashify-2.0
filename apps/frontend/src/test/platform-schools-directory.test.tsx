@@ -59,6 +59,8 @@ describe("PlatformSchoolsDirectory", () => {
     expect(screen.getByText("Inactive schools")).toBeInTheDocument();
     expect(screen.getByText("Directory status, not suspension")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export filtered schools" })).toBeEnabled();
+    expect(screen.getByRole("link", { name: /view school setup preview/i })).toHaveAttribute("href", "/dashboard/platform/school-setup");
+    expect(screen.queryByRole("link", { name: /school detail preview/i })).not.toBeInTheDocument();
     expect(
       screen.getByText(
         "This platform session cannot open school records, switch into a school, or change school settings.",

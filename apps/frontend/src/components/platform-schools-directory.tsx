@@ -102,14 +102,14 @@ export function PlatformSchoolsDirectory({ overview = false }: { overview?: bool
     session?.scope === "platform" &&
     session.user.role === "super_admin" &&
     session.permissionKeys.includes("platform.schools.read") &&
-    session.permissionKeys.includes("platform.schools.create");
+    session.permissionKeys.includes("platform.schools.create") &&
+    session.permissionKeys.includes("platform.school-admins.create");
   const canReadAudit = isApiMode && session?.scope === "platform" &&
     session.user.role === "super_admin" && session.permissionKeys.includes("platform.audit.read");
   const canReadSupport = isApiMode && session?.scope === "platform" &&
     session.user.role === "super_admin" && session.permissionKeys.includes("platform.support.read");
   const canReadSchools = isApiMode && session?.scope === "platform" &&
     session.user.role === "super_admin" && session.permissionKeys.includes("platform.schools.read");
-  const canCreateAdmin = canReadSchools && session?.permissionKeys.includes("platform.school-admins.create");
 
   const filters = (
     <div className={styles.filters}>
@@ -183,10 +183,9 @@ export function PlatformSchoolsDirectory({ overview = false }: { overview?: bool
               Export filtered schools
             </button>
           )}
-          {(canCreate || !isApiMode) && <Link className={styles.primaryLink} href={canCreate ? "/dashboard/schools/new" : "/dashboard/platform/create-school-admin"}>
-            {canCreate ? "Create school" : overview ? "Add school preview" : "Create school admin preview"}
+          {(canCreate || !isApiMode) && <Link className={styles.primaryLink} href={canCreate ? "/dashboard/schools/new" : "/dashboard/platform/school-setup"}>
+            {canCreate ? "Create school and admin" : "School setup preview"}
           </Link>}
-          {canCreateAdmin && <Link className={styles.textLink} href="/dashboard/platform/create-school-admin">Create School Admin</Link>}
         </div>
       </PageHeading>
 
@@ -312,8 +311,7 @@ export function PlatformSchoolsDirectory({ overview = false }: { overview?: bool
           <p>{isApiMode
             ? "School Admins can confirm setup after creating an academic year, class and section. Email invitations are not connected."
             : "Dummy preview: administrator invitations and onboarding are not connected."}</p>
-          <Link className={styles.textLink} href="/dashboard/platform/school-setup">View school setup and CSV import preview →</Link>
-          <Link className={styles.textLink} href="/dashboard/platform/school-detail">School detail preview →</Link>
+          <Link className={styles.textLink} href="/dashboard/platform/school-setup">View school setup preview →</Link>
         </div>
       )}
       <p className={styles.notice}>

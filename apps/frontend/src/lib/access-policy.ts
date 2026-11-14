@@ -353,7 +353,8 @@ export function isDashboardRouteAllowed(
     return role === "super_admin" &&
       permissionKeys !== undefined &&
       permissionKeys.includes("platform.schools.read") &&
-      permissionKeys.includes("platform.schools.create");
+      permissionKeys.includes("platform.schools.create") &&
+      permissionKeys.includes("platform.school-admins.create");
   }
   if (pathname.startsWith("/dashboard/platform/")) {
     const section = pathname.slice("/dashboard/platform/".length);

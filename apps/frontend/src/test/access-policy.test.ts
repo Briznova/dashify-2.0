@@ -30,7 +30,7 @@ const expected: Record<
     navigation: [
       "Overview",
       "Schools",
-      "School setup and CSV import",
+      "School setup",
       "Subscriptions",
       "Billing and invoices",
       "Platform users",
@@ -287,6 +287,7 @@ describe("role access policy", () => {
     expect(isDashboardRouteAllowed("/dashboard/platform/support-detail", "super_admin", [])).toBe(true);
     expect(isDashboardRouteAllowed("/dashboard/platform/support-detail", "school_admin", ["platform.schools.read"])).toBe(false);
     expect(isDashboardRouteAllowed("/dashboard/platform/unknown", "super_admin", [])).toBe(false);
+    expect(isDashboardRouteAllowed("/dashboard/platform/school-detail", "super_admin", ["platform.schools.read"])).toBe(false);
     expect(isDashboardRouteAllowed("/dashboard/platform/support/detail", "super_admin", [])).toBe(false);
     expect(
       isDashboardRouteAllowed(
@@ -297,10 +298,12 @@ describe("role access policy", () => {
     ).toBe(false);
   });
 
-  it("requires the explicit platform school-create permission for the new-school route", () => {
+  it("requires both creation permissions for the new-school route", () => {
     expect(isDashboardRouteAllowed("/dashboard/schools/new", "super_admin", ["platform.schools.read"])).toBe(false);
-    expect(isDashboardRouteAllowed("/dashboard/schools/new", "super_admin", ["platform.schools.read", "platform.schools.create"])).toBe(true);
-    expect(isDashboardRouteAllowed("/dashboard/schools/new", "school_admin", ["platform.schools.read", "platform.schools.create"])).toBe(false);
+    expect(isDashboardRouteAllowed("/dashboard/schools/new", "super_admin", ["platform.schools.read", "platform.schools.create"])).toBe(false);
+    expect(isDashboardRouteAllowed("/dashboard/schools/new", "super_admin", ["platform.schools.read", "platform.school-admins.create"])).toBe(false);
+    expect(isDashboardRouteAllowed("/dashboard/schools/new", "super_admin", ["platform.schools.read", "platform.schools.create", "platform.school-admins.create"])).toBe(true);
+    expect(isDashboardRouteAllowed("/dashboard/schools/new", "school_admin", ["platform.schools.read", "platform.schools.create", "platform.school-admins.create"])).toBe(false);
     expect(isDashboardRouteAllowed("/dashboard/schools/new", "super_admin")).toBe(false);
   });
 

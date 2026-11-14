@@ -12,7 +12,7 @@
 ## Outcome and boundaries
 
 Deliver an authenticated platform workspace for school provisioning, initial
-administrator onboarding, school setup and CSV import, support, audit, and
+administrator onboarding, school setup, support, audit, and
 approved platform settings. Overview and Schools must reflect real data.
 Subscription, plan, invoice, billing and platform-user management are **future
 scope** and must not be implemented or represented as live in this phase.
@@ -49,12 +49,15 @@ implemented controller, DTO and contract before it is represented as live.
 - Tenant transaction context exists, but database RLS is not yet a verified
   production isolation boundary. Do not claim production-ready isolation until
   the release security gates pass.
+- Product decision: school data CSV import is not a Super Admin capability.
+  A future School Admin import workflow remains unimplemented and requires its
+  own school-scoped contract and authorization review.
 
 ## Personas and authorization
 
 | Actor | Intended scope | Proposed actions | Denied by default |
 |---|---|---|---|
-| Platform Super Admin | Platform; explicitly targeted school setup operation | Read directory; create school and setup/import operations only after separate permission and object-policy approval | School switching, impersonation, unrestricted school records, billing and platform-user administration |
+| Platform Super Admin | Platform; explicitly targeted school setup operation | Read directory; create school and School Admin with separately granted permissions | School data imports, school switching, impersonation, unrestricted school records, billing and platform-user administration |
 | Initial School Admin | One assigned school | Accept an authorized invitation and complete permitted onboarding | Platform access or access to other schools |
 | School support requester | One authorized school | Create/view cases only if a support audience and object policy are approved | Other schools' cases and internal platform notes |
 | Other authenticated roles / anonymous users | Their existing scope / none | Only existing granted capabilities | All platform operations absent a server-side grant |
@@ -86,6 +89,20 @@ by exposing a frontend link.
 
 ### School creation and initial School Admin
 
+The platform overview and directory have one **Create school and admin**
+action. It opens a two-step
+flow that collects school details and then the first School Admin's details
+before submitting either request. It requires `platform.schools.read`,
+`platform.schools.create` and `platform.school-admins.create`.
+
+The existing school and administrator endpoints remain separate transactions;
+this is not an atomic operation. If administrator creation fails after school
+creation, the page retains the created school ID, reports the partial result,
+and retries only the administrator request. A link to the school detail remains
+available for recovery after leaving the page. If a response is interrupted, the
+operator must verify the result before retrying; no invitation or email is sent.
+Existing schools retain their detail-page administrator creation action.
+
 1. Capture the proposed school identity and required setup fields. Validate
    normalized school code uniqueness server-side.
 2. Select an approved account provisioning method. Prevent a platform account
@@ -101,28 +118,12 @@ by exposing a frontend link.
 5. Show only authorized setup milestones. Editing, suspending or reactivating a
    school requires its own confirmed lifecycle and audit policy.
 
-### School setup and CSV
+### School setup
 
-1. The operator chooses an explicit target school and approved data type. The
-   backend validates the target and authorization for each operation; the
-   browser cannot supply a tenant context that bypasses these checks.
-2. Provide versioned templates with exact column names, data types, required
-   fields, identifiers, examples using synthetic data, and dependency order.
-   The approved initial order is academic years, classes, sections, staff,
-   students with enrollments, then teacher assignments. Guardian matching and
-   account creation are deferred.
-3. Upload and parse under approved file/row/encoding limits. Reject malformed
-   headers, invalid fields, duplicate identifiers and references outside the
-   target school. A preview must describe row errors without claiming any
-   writes have occurred.
-4. Confirm against a validated immutable import version and explicit
-   idempotency key. Revalidate relevant records at commit time to handle
-   concurrent changes. Each file commits atomically and supports the approved
-   idempotent retry behavior.
-5. Show processing status, counts and authorized row-level results. Audit
-   actor, target, type, outcome and correlation ID without CSV contents,
-   credentials or unnecessary personal data. Apply the approved encryption,
-   retention and cleanup controls below.
+The Super Admin can create a school and its School Admin. The School Admin
+completes school-scoped setup; CSV import is not available in the platform
+workspace. The historical import decisions below remain deferred for review
+against a future school-scoped design.
 
 ### Support and ticket detail
 
@@ -197,7 +198,6 @@ browser cookies, CSRF checks for mutations and platform-only context.
 | List schools | `GET /platform/schools` | `platform.schools.read` | Existing array of five approved metadata fields; 401/403 on denial |
 | Create school | `POST /platform/schools` | `platform.schools.create` | Validated school identity and status; 400/409 for invalid/conflicting input |
 | Create/read invitation | `POST /platform/schools/{id}/admin-invitations`, `GET /platform/schools/{id}/admin-invitations/{invitationId}` | Dedicated invitation permissions | Invitation state, delivery state and expiry, never a secret |
-| Import template/validation/commit/results | `GET /platform/import-templates/{type}`, `POST /platform/schools/{id}/imports`, `POST /platform/schools/{id}/imports/{id}/commit`, `GET /platform/schools/{id}/imports/{id}` | Dedicated import read/write permissions | Versioned template, validation errors, job state/results; explicit target and idempotency |
 | Support queue/detail/transitions | `/platform/support-tickets` and `/{id}` | Dedicated support read/write permissions | Authorized ticket pages and audited, validated transitions |
 | Platform audit | `GET /platform/audit-events` | Dedicated platform audit read permission | Redacted, stable paginated event summaries |
 | Settings read/update | `/platform/settings` | Separate settings read/write permissions | Effective values and validated, audited changes only where enforced |
@@ -226,8 +226,7 @@ Any further choices explicitly identified as unresolved remain gated.
 ### Permissions and tenant boundary
 
 - Propose `platform.schools.create`, `platform.invitations.create`,
-  `platform.invitations.read`, `platform.imports.create`,
-  `platform.imports.read`, `platform.support.read`, `platform.support.update`,
+  `platform.invitations.read`, `platform.support.read`, `platform.support.update`,
   `platform.audit.read` and `platform.settings.read`. Keep
   `platform.schools.read` unchanged. No settings-write permission is proposed
   until an enforced setting is identified.
@@ -298,9 +297,9 @@ Any further choices explicitly identified as unresolved remain gated.
 
 ### Import contract
 
-- Bulk CSV implementation is deferred at product request; its pages remain
-  clearly marked as previews. The approved decisions below are retained for
-  a future implementation.
+- Bulk CSV implementation remains deferred and its preview has been removed
+  from the Super Admin workspace. The earlier decisions below are retained for
+  review when a future school-scoped implementation is specified.
 - Propose UTF-8 CSV with a versioned, exact header; a maximum of 5 MiB and
   5,000 data rows per upload; reject duplicate headers, malformed quoting and
   unexpected columns. These are reviewable limits, not present system limits.
@@ -373,9 +372,9 @@ Any further choices explicitly identified as unresolved remain gated.
    permissions and school creation; delivery remains gated on a configured,
    approved provider. Define OpenAPI and migration, then deliver invite →
    accept → school-admin onboarding with failure/retry and authorization tests.
-3. **Targeted setup and imports:** implement approved initial entities and
-   semantics with two-school isolation and concurrency/idempotency tests; keep
-   explicitly deferred guardian and account handling out of scope.
+3. **School-led setup:** keep bulk import outside the platform workspace. Any
+   future School Admin import requires its own approved contract, isolation and
+   concurrency/idempotency tests.
 4. **Support:** implement the approved platform-only initial workflow, with
    positive/negative authorization tests.
 5. **Platform audit:** implement the approved platform-origin event boundary

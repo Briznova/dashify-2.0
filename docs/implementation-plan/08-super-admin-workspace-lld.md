@@ -33,7 +33,7 @@ settings. Additional views represent drill-downs or setup steps.
 | Create school | `/dashboard/schools/new` | API-backed name and code creation; no invitation is sent. |
 | Create school admin | `/dashboard/platform/create-school-admin` | Dummy form, submission disabled. |
 | Invitation status | `/dashboard/platform/invitation-status` | Dummy lifecycle illustration; no invitation sent. |
-| School detail | `/dashboard/schools/[id]` | Read-only metadata and recorded onboarding state; no school-record access or edit. The generic design preview remains available separately. |
+| School detail | `/dashboard/schools/[id]` | Read-only metadata and recorded onboarding state; no school-record access or edit. |
 | Subscriptions | `/dashboard/platform/subscriptions` | Dummy subscription and renewal layout. |
 | Manage plans | `/dashboard/platform/plans` | Dummy plan layout; no pricing rules. |
 | Billing / invoices | `/dashboard/platform/billing` | Dummy invoice and summary layout. |
@@ -43,9 +43,8 @@ settings. Additional views represent drill-downs or setup steps.
 | Audit log | `/dashboard/platform/audit-log` | Permission-gated redacted platform events in API mode; mock mode remains a marked preview. |
 | Platform settings | `/dashboard/platform/settings` | Permission-gated read-only enforced token lifetimes; mock mode remains a marked preview. |
 
-Additionally provide a clearly marked school-setup / CSV import preview for the
-requested complete school setup workflow. It cannot upload, validate, store, or
-import data until a separate contract and policy are approved.
+Provide a clearly marked school-setup preview for the administrator onboarding
+workflow. CSV import is not part of the Super Admin workspace.
 
 ## Data and interaction design
 
@@ -130,9 +129,12 @@ import data until a separate contract and policy are approved.
 - **Settings:** show only access and refresh credential lifetimes enforced by
   the backend. Access requires a separate permission; saving and unrelated
   security or operations settings remain unavailable.
-- **School setup / CSV:** describe the sequence and provide preview navigation
-  to the admin invitation. Template download and upload are disabled; no
-  file is accepted or stored.
+- **School setup:** describe the sequence and link to the combined school and
+  first-administrator creation flow. The remaining setup steps are illustrative.
+  The directory exposes one creation action, gated on both creation grants.
+  The flow collects both steps before submitting separately transactional school
+  and administrator requests; partial failures retain a school-detail recovery
+  link and never retry school creation after a confirmed school response.
 
 ### State, failure and access handling
 
@@ -165,9 +167,9 @@ all data and actions presented on that page are real and tested.
 
 1. School provisioning: create or invite a School Admin, track invitation,
    onboarding and account status, then configure the target school.
-2. CSV setup: select an explicitly authorized target and entity type, download
-   a versioned template, validate and preview rows, confirm import, and review
-   results and row errors. No credentials are created implicitly.
+2. School data import is deferred to a future School Admin workflow. It requires
+   a separate school-scoped contract and authorization review; it is not a
+   Super Admin capability.
 3. Commercial operations: inspect subscriptions and renewals, manage plans,
    invoice and payment workflows, with explicit commercial rules.
 4. Remaining platform operations: school-facing support requests and other
@@ -183,7 +185,7 @@ Define contracts and add server authorization, audit and isolation tests first.
 
 ## Acceptance and verification
 
-- All 13 design views and the CSV setup preview are navigable in the Super Admin
+- The listed design views and the school setup preview are navigable in the Super Admin
   workspace; every unsupported view visibly states it is dummy and cannot
   execute mutations. Other roles cannot navigate directly to platform previews.
 - The live directory shows only backend fields, true loading/error/empty states,
