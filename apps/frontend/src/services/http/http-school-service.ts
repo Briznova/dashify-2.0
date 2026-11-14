@@ -1618,7 +1618,7 @@ export class HttpSchoolService implements SchoolService {
     signal?: AbortSignal,
   ): Promise<TeacherAssignment[]> {
     const response = await this.api.request<unknown>(
-      "/staff/teacher-assignments",
+      "/teacher-assignments",
       {},
       signal,
     );
@@ -1630,7 +1630,7 @@ export class HttpSchoolService implements SchoolService {
 
   async assignTeacher(input: AssignTeacherInput): Promise<TeacherAssignment> {
     return parseTeacherAssignment(
-      await this.api.request<unknown>("/staff/teacher-assignments", {
+      await this.api.request<unknown>("/teacher-assignments", {
         method: "POST",
         body: JSON.stringify(input),
       }),

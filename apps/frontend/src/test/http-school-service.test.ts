@@ -895,6 +895,52 @@ describe("HttpSchoolService.getClassrooms", () => {
     );
   });
 
+  it("lists and saves teacher assignments using the backend routes", async () => {
+    const assignment = {
+      id: "assignment-1",
+      staffId: "staff-1",
+      classId: "class-1",
+      sectionId: "section-1",
+      subject: "Mathematics",
+      isClassTeacher: true,
+      staff: { firstName: "Synthetic", lastName: "Teacher" },
+      class: { name: "Class 1" },
+      section: { name: "A" },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([assignment]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(assignment), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+    const input = {
+      staffId: assignment.staffId,
+      classId: assignment.classId,
+      sectionId: assignment.sectionId,
+      subject: assignment.subject,
+      isClassTeacher: true,
+    };
+    const expected = {
+      id: assignment.id,
+      ...input,
+      staffName: "Synthetic Teacher",
+      className: "Class 1",
+      sectionName: "A",
+    };
+
+    await expect(service.getTeacherAssignments()).resolves.toEqual([expected]);
+    await expect(service.assignTeacher(input)).resolves.toEqual(expected);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://dashify.test/api/v1/teacher-assignments",
+      expect.objectContaining({ credentials: "include" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://dashify.test/api/v1/teacher-assignments",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(input), credentials: "include" }),
+    );
+  });
+
   it("uses the Teacher account and school department contracts", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "dept-1", name: "Synthetic", isActive: true }]), { status: 200 }))
