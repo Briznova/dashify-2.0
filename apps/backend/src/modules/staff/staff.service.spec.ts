@@ -11,6 +11,17 @@ describe("StaffService account management", () => {
   const actorId = "admin-1";
   const staffId = "staff-1";
   const userId = "teacher-1";
+  const standardTeacherPermissionKeys = [
+    "dashboard.teacher.read",
+    "announcements.read",
+    "teacher.classes.read",
+    "teacher.attendance.read",
+    "teacher.attendance.mark",
+    "teacher.assessments.read",
+    "teacher.assessments.manage",
+    "teacher.results.read",
+    "teacher.results.write",
+  ];
 
   let service: StaffService;
   let withTenant: jest.Mock;
@@ -20,9 +31,19 @@ describe("StaffService account management", () => {
       create: jest.Mock;
       update: jest.Mock;
     };
-    user: { findUnique: jest.Mock };
+    user: {
+      findUnique: jest.Mock;
+      findFirst: jest.Mock;
+      create: jest.Mock;
+    };
     platformAdminGrant: { findFirst: jest.Mock };
-    role: { findFirst: jest.Mock };
+    role: {
+      findFirst: jest.Mock;
+      findUnique: jest.Mock;
+      create: jest.Mock;
+    };
+    permission: { upsert: jest.Mock };
+    rolePermission: { create: jest.Mock };
     schoolMembership: {
       findUnique: jest.Mock;
       create: jest.Mock;
@@ -33,7 +54,15 @@ describe("StaffService account management", () => {
       deleteMany: jest.Mock;
       count: jest.Mock;
     };
-    teacherAssignment: { updateMany: jest.Mock };
+    teacherAssignment: {
+      findFirst: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+    };
+    schoolClass: { findFirst: jest.Mock };
+    section: { findFirst: jest.Mock };
+    $queryRaw: jest.Mock;
     auditLog: { create: jest.Mock };
   };
 
@@ -44,9 +73,25 @@ describe("StaffService account management", () => {
         create: jest.fn(),
         update: jest.fn(),
       },
-      user: { findUnique: jest.fn() },
+      user: {
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
       platformAdminGrant: { findFirst: jest.fn().mockResolvedValue(null) },
-      role: { findFirst: jest.fn() },
+      role: {
+        findFirst: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue({
+          id: "teacher-role",
+          isSystem: true,
+          permissions: standardTeacherPermissionKeys.map((key) => ({
+            permission: { key },
+          })),
+        }),
+        create: jest.fn(),
+      },
+      permission: { upsert: jest.fn() },
+      rolePermission: { create: jest.fn() },
       schoolMembership: {
         findUnique: jest.fn(),
         create: jest.fn(),
@@ -58,8 +103,14 @@ describe("StaffService account management", () => {
         count: jest.fn(),
       },
       teacherAssignment: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
+      schoolClass: { findFirst: jest.fn() },
+      section: { findFirst: jest.fn() },
+      $queryRaw: jest.fn().mockResolvedValue([{ id: schoolId }]),
       auditLog: { create: jest.fn() },
     };
     withTenant = jest.fn(
@@ -80,7 +131,14 @@ describe("StaffService account management", () => {
     };
     tx.staffProfile.findFirst.mockResolvedValue(null);
     tx.user.findUnique.mockResolvedValue(user);
-    tx.role.findFirst.mockResolvedValue({ id: "teacher-role" });
+    tx.role.findUnique.mockResolvedValue(null);
+    tx.role.create.mockResolvedValue({
+      id: "teacher-role",
+      isSystem: true,
+      permissions: [],
+    });
+    tx.permission.upsert.mockResolvedValue({ id: "teacher-permission" });
+    tx.rolePermission.create.mockResolvedValue({});
     tx.schoolMembership.findUnique.mockResolvedValue(null);
     tx.schoolMembership.create.mockResolvedValue({
       id: "membership-1",
@@ -101,6 +159,14 @@ describe("StaffService account management", () => {
     expect(tx.user.findUnique).toHaveBeenCalledWith({
       where: { email: "teacher@example.test" },
     });
+    expect(tx.role.create).toHaveBeenCalledWith({
+      data: { schoolId, key: "TEACHER", name: "Teacher", isSystem: true },
+      include: {
+        permissions: { include: { permission: { select: { key: true } } } },
+      },
+    });
+    expect(tx.permission.upsert).toHaveBeenCalledTimes(9);
+    expect(tx.rolePermission.create).toHaveBeenCalledTimes(9);
     expect(tx.schoolMembership.create).toHaveBeenCalledWith({
       data: {
         schoolId,
@@ -133,6 +199,65 @@ describe("StaffService account management", () => {
       }),
     );
     expect(withTenant).toHaveBeenCalledWith(schoolId, expect.any(Function));
+  });
+
+  it("creates new Teacher accounts with the standard permission-bearing role", async () => {
+    tx.user.findFirst.mockResolvedValue(null);
+    tx.user.create.mockResolvedValue({
+      id: userId,
+      email: "new-teacher@example.test",
+      firstName: "Taylor",
+      lastName: null,
+    });
+    tx.role.findUnique.mockResolvedValue({
+      id: "teacher-role",
+      isSystem: true,
+      permissions: standardTeacherPermissionKeys
+        .filter((key) => key !== "dashboard.teacher.read")
+        .map((key) => ({ permission: { key } })),
+    });
+    tx.permission.upsert.mockResolvedValue({ id: "dashboard-permission" });
+    tx.rolePermission.create.mockResolvedValue({});
+    tx.schoolMembership.create.mockResolvedValue({ id: "membership-1" });
+    tx.staffProfile.create.mockResolvedValue({
+      id: staffId,
+      userId,
+      firstName: "Taylor",
+    });
+
+    await service.createTeacherAccount(schoolId, actorId, {
+      employeeCode: "T-2",
+      firstName: "Taylor",
+      email: "new-teacher@example.test",
+      password: "synthetic-test-password",
+    });
+
+    expect(tx.role.findUnique).toHaveBeenCalledWith({
+      where: { schoolId_key: { schoolId, key: "TEACHER" } },
+      include: {
+        permissions: { include: { permission: { select: { key: true } } } },
+      },
+    });
+    expect(tx.permission.upsert).toHaveBeenCalledWith({
+      where: { key: "dashboard.teacher.read" },
+      create: { key: "dashboard.teacher.read" },
+      update: {},
+    });
+    expect(tx.rolePermission.create).toHaveBeenCalledWith({
+      data: {
+        roleId: "teacher-role",
+        permissionId: "dashboard-permission",
+      },
+    });
+    expect(tx.schoolMembership.create).toHaveBeenCalledWith({
+      data: {
+        schoolId,
+        userId,
+        status: "ACTIVE",
+        joinedAt: expect.any(Date),
+        roles: { create: { roleId: "teacher-role" } },
+      },
+    });
   });
 
   it("does not create accounts when the supplied email has no existing user", async () => {
@@ -247,6 +372,68 @@ describe("StaffService account management", () => {
       service.update(schoolId, actorId, staffId, {}),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(tx.staffProfile.update).not.toHaveBeenCalled();
+  });
+
+  it("designates one assigned teacher for a specific section", async () => {
+    tx.staffProfile.findFirst.mockResolvedValue({ id: staffId });
+    tx.schoolClass.findFirst.mockResolvedValue({ id: "class-1" });
+    tx.section.findFirst.mockResolvedValue({ id: "section-1" });
+    tx.teacherAssignment.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    tx.teacherAssignment.create.mockResolvedValue({
+      id: "assignment-1",
+      isClassTeacher: true,
+    });
+
+    await service.assignTeacher(schoolId, actorId, {
+      staffId,
+      classId: "class-1",
+      sectionId: "section-1",
+      isClassTeacher: true,
+    });
+
+    expect(tx.teacherAssignment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          schoolId,
+          staffId,
+          classId: "class-1",
+          sectionId: "section-1",
+          isClassTeacher: true,
+        }),
+      }),
+    );
+    expect(tx.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          summary: {
+            classId: "class-1",
+            sectionId: "section-1",
+            isClassTeacher: true,
+          },
+        }),
+      }),
+    );
+  });
+
+  it("rejects a second designated class teacher for the same section", async () => {
+    tx.staffProfile.findFirst.mockResolvedValue({ id: staffId });
+    tx.schoolClass.findFirst.mockResolvedValue({ id: "class-1" });
+    tx.section.findFirst.mockResolvedValue({ id: "section-1" });
+    tx.teacherAssignment.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "existing-assignment" });
+
+    await expect(
+      service.assignTeacher(schoolId, actorId, {
+        staffId,
+        classId: "class-1",
+        sectionId: "section-1",
+        isClassTeacher: true,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.teacherAssignment.create).not.toHaveBeenCalled();
   });
 
   it("deactivates the profile and assignments and revokes an otherwise-empty membership", async () => {

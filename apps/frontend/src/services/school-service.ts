@@ -129,6 +129,8 @@ export interface SchoolService {
   updateStudent(id: string, input: StudentInput): Promise<Student>;
   getAcademicYears(signal?: AbortSignal): Promise<AcademicYear[]>;
   createAcademicYear(input: CreateAcademicYearInput): Promise<AcademicYear>;
+  activateAcademicYear(id: string): Promise<AcademicYear>;
+  completeAcademicYear(id: string): Promise<AcademicYear>;
   getStaff(signal?: AbortSignal): Promise<StaffMember[]>;
   getAnnouncements(includeDrafts?: boolean, signal?: AbortSignal): Promise<Announcement[]>;
   createAnnouncement(input: CreateAnnouncementInput): Promise<Announcement>;

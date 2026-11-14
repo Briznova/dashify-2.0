@@ -28,11 +28,16 @@
 - Changed-file ESLint passed. Full frontend lint still reports an existing error at `apps/frontend/src/components/student-record.tsx` (the unrelated effect-driven state update) and warnings.
 - No production build, migration status check, live API/UI smoke test, or browser verification was completed in this continuation.
 
-## Next steps for the receiving agent
+## Remaining follow-up
 
-1. Read `docs/implementation-plan/00-execution-roadmap.md` and `docs/implementation-plan/10-teacher-workspace-spec.md` before continuing; preserve the approved scope and exclude Parent UI.
-2. Inspect `git status` and `git diff` carefully to separate this work from any pre-existing user changes.
-3. Finish and validate `docs/api-contracts/teacher-workspace.openapi.yaml`; update the relevant academic-structure, staff, announcements/notifications contracts and implementation-plan baseline/checklist. Check the backend controllers and DTOs as the contract source of truth.
-4. Add or complete focused tests for notifications and remaining approved Teacher workflows, then run backend typecheck/tests/build, frontend typecheck/tests/build, and migration-status checks.
-5. Perform the available synthetic-data UI/API verification. Do not use real student or credential data.
-6. Confirm the checkpoint commit is present on the intended remote branch. If it is not, review the final diff, stage only in-scope changes, commit with the repository-required Copilot co-author trailer, and push. Confirm the branch/remote and treatment of pre-existing dirty changes before staging or pushing.
+1. If desired, perform synthetic-data UI/API smoke verification. Do not use real student or credential data.
+2. Before any commit or push, inspect the current branch, remote, and full diff; stage only in-scope files and preserve unrelated untracked files.
+
+## Continuation completed — 2026-11-15
+
+- Corrected attendance editability so only today's session in the active academic year is editable, subject to the existing ownership/session checks. Added regression coverage for historical, future, and archived-year dates.
+- Completed Teacher role provisioning and repair for both new login creation and linking an existing account. A follow-up migration backfills the standard nine permissions on existing system Teacher roles; nonstandard roles with extra permissions are not silently accepted.
+- Applied the reordered Teacher migrations and role-grant backfill to the local `dashify` database. `prisma migrate status` reports all 26 migrations applied. A read-only aggregate confirms both existing school Teacher roles have exactly the nine standard permissions.
+- Updated the staff API contract and implementation-plan baseline/checklist. Existing active Teacher memberships inherit the repaired role grants; recreating a linked Teacher account is not needed for this permission fix. Class and section data still requires an active teacher assignment.
+- Backend validation after the latest code changes: 31 suites / 194 tests passed, `npm run typecheck` passed, and `npm run build` passed. `git diff --check` passed. Frontend validation from the preceding continuation remains as recorded above.
+- No commit or push was performed. Preserve unrelated untracked `.vscode/mcp.json` and `cookie.txt`, and review the complete dirty tree before any staging or push.

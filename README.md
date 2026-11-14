@@ -68,6 +68,8 @@ Create separate Railway services from this repository:
 
 Configure the frontend API URL, backend CORS origin, cookie settings, CSRF configuration, and database credentials through Railway variables. Never commit `.env` files or production secrets.
 
+For synthetic-data staging, follow the [Railway staging playbook](./docs/implementation-plan/12-railway-staging-playbook.md), including the same-origin proxy configuration and verification.
+
 ## Documentation
 
 - [Architecture and backend design](./docs/architecture/)

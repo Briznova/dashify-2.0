@@ -5,12 +5,16 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  AcademicYearStatus,
   AttendanceSessionStatus,
   Prisma,
   TeacherAssessmentType,
   TeacherAssessmentStatus,
 } from "@prisma/client";
-import { parseCalendarDate } from "../../common/utils/calendar-date";
+import {
+  parseCalendarDate,
+  schoolLocalDate,
+} from "../../common/utils/calendar-date";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { AttendanceQueryDto } from "./dto/attendance-query.dto";
 import { CreateAssessmentDto } from "./dto/create-assessment.dto";
@@ -89,7 +93,11 @@ export class TeacherWorkspaceService {
   ) {
     const date = parseCalendarDate(query.date);
     return this.prisma.withTenant(schoolId, async (tx) => {
-      const { staffId } = await this.teacherContext(tx, schoolId, userId);
+      const { staffId, timezone } = await this.teacherContext(
+        tx,
+        schoolId,
+        userId,
+      );
       const academicYear = await this.academicYear(
         tx,
         schoolId,
@@ -148,10 +156,12 @@ export class TeacherWorkspaceService {
         date: query.date,
         status: session?.status ?? null,
         canEdit:
-          !session ||
-          ((session.status === AttendanceSessionStatus.DRAFT ||
-            session.status === AttendanceSessionStatus.SUBMITTED) &&
-            session.createdBy === userId),
+          academicYear.status === AcademicYearStatus.ACTIVE &&
+          query.date === schoolLocalDate(new Date(), timezone) &&
+          (!session ||
+            ((session.status === AttendanceSessionStatus.DRAFT ||
+              session.status === AttendanceSessionStatus.SUBMITTED) &&
+              session.createdBy === userId)),
         students: roster.map((entry) => ({
           studentId: entry.studentId,
           rollNumber: entry.rollNumber,
@@ -183,7 +193,7 @@ export class TeacherWorkspaceService {
         );
         this.assertActiveAcademicYear(academicYear);
         this.assertDateInAcademicYear(date, academicYear);
-        if (dto.date !== this.schoolLocalDate(new Date(), timezone)) {
+        if (dto.date !== schoolLocalDate(new Date(), timezone)) {
           throw new BadRequestException(
             "Teachers can record attendance only for the school's current local date",
           );
@@ -324,7 +334,7 @@ export class TeacherWorkspaceService {
       );
       this.assertActiveAcademicYear(academicYear);
       this.assertDateInAcademicYear(date, academicYear);
-      if (dto.date !== this.schoolLocalDate(new Date(), timezone)) {
+      if (dto.date !== schoolLocalDate(new Date(), timezone)) {
         throw new BadRequestException(
           "Teachers can submit attendance only for the school's current local date",
         );
@@ -451,7 +461,7 @@ export class TeacherWorkspaceService {
       );
       this.assertActiveAcademicYear(academicYear);
       this.assertDateInAcademicYear(dueDate, academicYear);
-      if (dto.dueDate < this.schoolLocalDate(new Date(), timezone)) {
+      if (dto.dueDate < schoolLocalDate(new Date(), timezone)) {
         throw new BadRequestException(
           "Assessment date cannot be before the school's current local date",
         );
@@ -1110,16 +1120,4 @@ export class TeacherWorkspaceService {
     return date.toISOString().slice(0, 10);
   }
 
-  private schoolLocalDate(now: Date, timezone: string) {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(now);
-    const values = Object.fromEntries(
-      parts.map((part) => [part.type, part.value]),
-    );
-    return `${values.year}-${values.month}-${values.day}`;
-  }
 }

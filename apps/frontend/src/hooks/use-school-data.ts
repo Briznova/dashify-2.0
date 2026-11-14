@@ -653,6 +653,47 @@ export function useCreateAcademicYear() {
   return { create, isPending, error };
 }
 
+export function useAcademicYearLifecycle() {
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const transition = useCallback(
+    async (
+      id: string,
+      action: "activate" | "complete",
+    ): Promise<AcademicYear | null> => {
+      setPendingId(id);
+      setError(null);
+      try {
+        return action === "activate"
+          ? await schoolService.activateAcademicYear(id)
+          : await schoolService.completeAcademicYear(id);
+      } catch (reason) {
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Unable to update the academic year.",
+        );
+        return null;
+      } finally {
+        setPendingId(null);
+      }
+    },
+    [],
+  );
+
+  const activate = useCallback(
+    (id: string) => transition(id, "activate"),
+    [transition],
+  );
+  const complete = useCallback(
+    (id: string) => transition(id, "complete"),
+    [transition],
+  );
+
+  return { activate, complete, pendingId, error };
+}
+
 export function useSchoolProfile() {
   const load = useCallback((signal: AbortSignal) => schoolService.getSchoolProfile(signal), []);
   return useRemoteResource<SchoolProfile>(load);

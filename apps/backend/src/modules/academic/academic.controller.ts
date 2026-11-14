@@ -63,6 +63,8 @@ export class AcademicController {
 
   @Post("academic-years")
   @RequirePermissions("academic_structure.manage")
+  @ApiHeader({ name: "Origin", required: true })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
   @ApiOperation({ summary: "Create an academic year for the active school" })
   @ApiBody({ type: CreateAcademicYearDto })
   createYear(
@@ -70,6 +72,30 @@ export class AcademicController {
     @Body() dto: CreateAcademicYearDto,
   ) {
     return this.academic.createYear(this.school(req), dto);
+  }
+
+  @Post("academic-years/:id/activate")
+  @RequirePermissions("academic_structure.manage")
+  @ApiHeader({ name: "Origin", required: true })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiOperation({ summary: "Activate a draft academic year within its date range" })
+  activateYear(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) yearId: string,
+  ) {
+    return this.academic.activateYear(this.school(req), req.user.id, yearId);
+  }
+
+  @Post("academic-years/:id/complete")
+  @RequirePermissions("academic_structure.manage")
+  @ApiHeader({ name: "Origin", required: true })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiOperation({ summary: "Complete an active academic year after its end date" })
+  completeYear(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) yearId: string,
+  ) {
+    return this.academic.completeYear(this.school(req), req.user.id, yearId);
   }
 
   @Get("classes")

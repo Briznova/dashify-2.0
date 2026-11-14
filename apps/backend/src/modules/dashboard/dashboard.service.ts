@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { schoolLocalDate } from "../../common/utils/calendar-date";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { PrincipalDashboardDto } from "./dto/principal-dashboard.dto";
 import { SchoolAdminDashboardDto } from "./dto/school-admin-dashboard.dto";
@@ -29,22 +30,6 @@ type TeacherDashboardAssignmentRow = {
   sessionStatus: "DRAFT" | "SUBMITTED" | "OPEN" | "CLOSED" | null;
   unmarkedCount: number | null;
 };
-
-function schoolLocalDate(now: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-  if (!year || !month || !day) {
-    throw new Error("Could not derive the school-local calendar date");
-  }
-  return `${year}-${month}-${day}`;
-}
 
 @Injectable()
 export class DashboardService {

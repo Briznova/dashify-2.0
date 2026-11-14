@@ -127,6 +127,15 @@ describe("AnnouncementsService", () => {
         }),
       }),
     );
+    expect(tx.schoolMembership.findMany).toHaveBeenCalledWith({
+      where: {
+        schoolId,
+        status: "ACTIVE",
+        roles: { some: { role: { is: { key: "TEACHER" } } } },
+        user: { is: { isActive: true } },
+      },
+      select: { userId: true },
+    });
     expect(tx.auditLog.create).toHaveBeenCalled();
     expect(tx.notification.createMany).toHaveBeenCalledWith({
       data: [

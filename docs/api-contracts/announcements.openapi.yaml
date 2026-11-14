@@ -81,6 +81,7 @@ paths:
     post:
       operationId: publishAnnouncement
       summary: Publish an unpublished school-wide announcement
+      description: Publishing also creates an in-app notification for each active Teacher account in the school.
       x-required-permission: announcements.manage
       x-tenant-scope: authenticated active school
       parameters:

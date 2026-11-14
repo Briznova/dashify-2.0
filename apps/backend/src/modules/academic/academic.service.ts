@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { AcademicYearStatus, Prisma } from '@prisma/client';
+import { schoolLocalDate } from '../../common/utils/calendar-date';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateAcademicYearDto } from './dto/create-academic-year.dto';
 import { CreateClassDto } from './dto/create-class.dto';
@@ -108,6 +109,103 @@ export class AcademicService {
       return tx.academicYear.create({ data: { schoolId, name: dto.name, startDate: start, endDate: end } });
     });
   }
+  async activateYear(schoolId: string, actorId: string, academicYearId: string) {
+    return this.prisma.withTenant(schoolId, async (tx) => {
+      const timezone = await this.lockSchoolForYearTransition(tx, schoolId);
+      const year = await tx.academicYear.findFirst({ where: { id: academicYearId, schoolId } });
+      if (!year) throw new NotFoundException('Academic year not found');
+      if (year.status !== AcademicYearStatus.DRAFT) {
+        throw new ConflictException('Only draft academic years can be activated');
+      }
+
+      const currentYear = await tx.academicYear.findFirst({
+        where: { schoolId, status: AcademicYearStatus.ACTIVE },
+        select: { id: true, name: true },
+      });
+      if (currentYear) {
+        throw new ConflictException(
+          'Complete the currently active academic year before activating another',
+        );
+      }
+
+      const today = schoolLocalDate(new Date(), timezone);
+      const startDate = year.startDate.toISOString().slice(0, 10);
+      const endDate = year.endDate.toISOString().slice(0, 10);
+      if (today < startDate || today > endDate) {
+        throw new ConflictException(
+          'An academic year can only be activated during its date range',
+        );
+      }
+
+      const activated = await tx.academicYear.update({
+        where: { id: academicYearId },
+        data: { status: AcademicYearStatus.ACTIVE },
+      });
+      await tx.auditLog.create({
+        data: {
+          schoolId,
+          actorUserId: actorId,
+          action: 'ACADEMIC_YEAR_ACTIVATED',
+          resource: 'academic_year',
+          resourceId: academicYearId,
+          summary: { name: year.name, startDate, endDate },
+        },
+      });
+      return activated;
+    });
+  }
+
+  async completeYear(schoolId: string, actorId: string, academicYearId: string) {
+    return this.prisma.withTenant(schoolId, async (tx) => {
+      const timezone = await this.lockSchoolForYearTransition(tx, schoolId);
+      const year = await tx.academicYear.findFirst({ where: { id: academicYearId, schoolId } });
+      if (!year) throw new NotFoundException('Academic year not found');
+      if (year.status !== AcademicYearStatus.ACTIVE) {
+        throw new ConflictException('Only active academic years can be completed');
+      }
+
+      const endDate = year.endDate.toISOString().slice(0, 10);
+      if (schoolLocalDate(new Date(), timezone) <= endDate) {
+        throw new ConflictException(
+          'An academic year can only be completed after its end date',
+        );
+      }
+
+      const completed = await tx.academicYear.update({
+        where: { id: academicYearId },
+        data: { status: AcademicYearStatus.COMPLETED },
+      });
+      await tx.auditLog.create({
+        data: {
+          schoolId,
+          actorUserId: actorId,
+          action: 'ACADEMIC_YEAR_COMPLETED',
+          resource: 'academic_year',
+          resourceId: academicYearId,
+          summary: { name: year.name, endDate },
+        },
+      });
+      return completed;
+    });
+  }
+
+  private async lockSchoolForYearTransition(
+    tx: Prisma.TransactionClient,
+    schoolId: string,
+  ): Promise<string> {
+    // Serialize year transitions so concurrent admins cannot activate two years.
+    const [school] = await tx.$queryRaw<{ timezone: string }[]>(
+      Prisma.sql`
+        SELECT "timezone"
+        FROM "schools"
+        WHERE "id" = ${schoolId}::uuid AND "is_active" = TRUE
+        FOR UPDATE
+      `,
+    );
+    if (!school) throw new NotFoundException('Active school not found');
+    return school.timezone;
+  }
+
   async listClasses(schoolId: string) {
     return this.prisma.withTenant(schoolId, (tx) => tx.schoolClass.findMany({ where: { schoolId, isActive: true }, include: { sections: true }, orderBy: { sortOrder: 'asc' } }));
   }

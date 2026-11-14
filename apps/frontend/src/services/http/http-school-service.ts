@@ -69,6 +69,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isAcademicYearStatus(
+  value: unknown,
+): value is AcademicYear["status"] {
+  return value === "DRAFT" || value === "ACTIVE" || value === "COMPLETED";
+}
+
+function parseAcademicYear(value: unknown, index?: number): AcademicYear {
+  const context =
+    index === undefined ? "academic-year data" : `academic year ${index}`;
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.startDate !== "string" ||
+    typeof value.endDate !== "string" ||
+    !isAcademicYearStatus(value.status)
+  ) {
+    throw new ApiError(`The Dashify service returned invalid ${context}.`, 502);
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    startDate: value.startDate,
+    endDate: value.endDate,
+    status: value.status,
+  };
+}
+
 function parseAcademicClasses(response: unknown): Classroom[] {
   if (!Array.isArray(response)) {
     throw new ApiError("The Dashify service returned invalid class data.", 502);
@@ -295,7 +323,7 @@ function parseTeacherDashboard(response: unknown): TeacherDashboard {
       typeof response.academicYearName !== "string") ||
     (response.academicYearStatus !== null &&
       response.academicYearStatus !== undefined &&
-      typeof response.academicYearStatus !== "string") ||
+      !isAcademicYearStatus(response.academicYearStatus)) ||
     !Array.isArray(response.assignments)
   ) {
     throw new ApiError(
@@ -372,7 +400,7 @@ function parseTeacherDashboard(response: unknown): TeacherDashboard {
         ? response.academicYearName
         : null,
     academicYearStatus:
-      typeof response.academicYearStatus === "string"
+      isAcademicYearStatus(response.academicYearStatus)
         ? response.academicYearStatus
         : null,
     assignments,
@@ -395,7 +423,7 @@ function parseTeacherAcademicYears(response: unknown): TeacherAcademicYear[] {
       !isValidCalendarDate(item.startDate.slice(0, 10)) ||
       typeof item.endDate !== "string" ||
       !isValidCalendarDate(item.endDate.slice(0, 10)) ||
-      typeof item.status !== "string"
+      !isAcademicYearStatus(item.status)
     ) {
       throw new ApiError(
         `The Dashify service returned invalid teacher academic year ${index + 1}.`,
@@ -413,16 +441,26 @@ function parseTeacherAcademicYears(response: unknown): TeacherAcademicYear[] {
 }
 
 function parseTeacherSections(response: unknown): TeacherSections {
-  if (
-    !isRecord(response) ||
-    !Array.isArray(response.sections) ||
-    (response.academicYear !== null &&
-      (!isRecord(response.academicYear) ||
-        typeof response.academicYear.id !== "string" ||
-        typeof response.academicYear.name !== "string" ||
-        typeof response.academicYear.status !== "string"))
-  ) {
+  if (!isRecord(response) || !Array.isArray(response.sections)) {
     throw new ApiError("The Dashify service returned invalid teacher sections.", 502);
+  }
+  let academicYear: TeacherSections["academicYear"] = null;
+  if (response.academicYear !== null) {
+    const year = response.academicYear;
+    if (!isRecord(year)) {
+      throw new ApiError("The Dashify service returned invalid teacher sections.", 502);
+    }
+    const id = year.id;
+    const name = year.name;
+    const status = year.status;
+    if (
+      typeof id !== "string" ||
+      typeof name !== "string" ||
+      !isAcademicYearStatus(status)
+    ) {
+      throw new ApiError("The Dashify service returned invalid teacher sections.", 502);
+    }
+    academicYear = { id, name, status };
   }
   const sections: TeacherSection[] = response.sections.map((item, index) => {
     if (
@@ -462,14 +500,7 @@ function parseTeacherSections(response: unknown): TeacherSections {
     };
   });
   return {
-    academicYear:
-      response.academicYear === null
-        ? null
-        : {
-            id: response.academicYear.id as string,
-            name: response.academicYear.name as string,
-            status: response.academicYear.status as string,
-          },
+    academicYear,
     sections,
   };
 }
@@ -489,7 +520,7 @@ function parseTeacherAttendance(response: unknown): TeacherAttendance {
     !isRecord(response.academicYear) ||
     typeof response.academicYear.id !== "string" ||
     typeof response.academicYear.name !== "string" ||
-    typeof response.academicYear.status !== "string" ||
+    !isAcademicYearStatus(response.academicYear.status) ||
     !isRecord(response.section) ||
     typeof response.section.id !== "string" ||
     typeof response.section.name !== "string" ||
@@ -1698,26 +1729,7 @@ export class HttpSchoolService implements SchoolService {
     if (!Array.isArray(response)) {
       throw new ApiError("The Dashify service returned invalid academic-year data.", 502);
     }
-
-    return response.map((item, index) => {
-      if (
-        !isRecord(item) ||
-        typeof item.id !== "string" ||
-        typeof item.name !== "string" ||
-        typeof item.startDate !== "string" ||
-        typeof item.endDate !== "string" ||
-        typeof item.status !== "string"
-      ) {
-        throw new ApiError(`The Dashify service returned invalid academic year ${index + 1}.`, 502);
-      }
-      return {
-        id: item.id,
-        name: item.name,
-        startDate: item.startDate,
-        endDate: item.endDate,
-        status: item.status,
-      };
-    });
+    return response.map((item, index) => parseAcademicYear(item, index + 1));
   }
 
   async createAcademicYear(input: CreateAcademicYearInput): Promise<AcademicYear> {
@@ -1725,23 +1737,23 @@ export class HttpSchoolService implements SchoolService {
       method: "POST",
       body: JSON.stringify(input),
     });
-    if (
-      !isRecord(response) ||
-      typeof response.id !== "string" ||
-      typeof response.name !== "string" ||
-      typeof response.startDate !== "string" ||
-      typeof response.endDate !== "string" ||
-      typeof response.status !== "string"
-    ) {
-      throw new ApiError("The Dashify service returned invalid academic-year data.", 502);
-    }
-    return {
-      id: response.id,
-      name: response.name,
-      startDate: response.startDate,
-      endDate: response.endDate,
-      status: response.status,
-    };
+    return parseAcademicYear(response);
+  }
+
+  async activateAcademicYear(id: string): Promise<AcademicYear> {
+    const response = await this.api.request<unknown>(
+      `/academic-years/${encodeURIComponent(id)}/activate`,
+      { method: "POST" },
+    );
+    return parseAcademicYear(response);
+  }
+
+  async completeAcademicYear(id: string): Promise<AcademicYear> {
+    const response = await this.api.request<unknown>(
+      `/academic-years/${encodeURIComponent(id)}/complete`,
+      { method: "POST" },
+    );
+    return parseAcademicYear(response);
   }
 
   async getStaff(signal?: AbortSignal): Promise<StaffMember[]> {

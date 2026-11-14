@@ -17,11 +17,14 @@ paths:
       x-tenant-scope: authenticated active school
       description: >
         Creates a new global user, active membership, standard Teacher role, and
-        staff profile atomically. Existing email addresses are rejected
-        case-insensitively. The administrator sets the initial password; no
-        invitation, delivery, email verification, or forced password change is
-        provided. The password is not returned or included in the audit.
-        The optional department must be active and belong to this school.
+        staff profile atomically. The role receives the standard Teacher
+        workspace permissions for dashboard, announcements, classes, attendance,
+        assessments, and results. Class data remains limited to active teacher
+        assignments. Existing email addresses are rejected case-insensitively.
+        The administrator sets the initial password; no invitation, delivery,
+        email verification, or forced password change is provided. The password
+        is not returned or included in the audit. The optional department must be
+        active and belong to this school.
       parameters:
         - $ref: "#/components/parameters/OriginHeader"
         - $ref: "#/components/parameters/CsrfHeader"
@@ -178,8 +181,9 @@ paths:
       description: >
         Linking by accountEmail requires that the user already exists. The operation
         creates a membership when none exists and grants only this school's Teacher
-        role. Existing suspended, revoked, or invited memberships are rejected. It
-        does not create a login, invite a user, or set credentials. Do not send both
+        role, provisioning the standard Teacher workspace permissions when needed.
+        Existing suspended, revoked, or invited memberships are rejected. It does
+        not create a login, invite a user, or set credentials. Do not send both
         userId and accountEmail. If supplied, department must match an active
         department in the active school; designation must be Teacher.
       requestBody:
@@ -329,6 +333,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           description: Staff member, class, or section was not found in the active school
+        "409":
+          description: A different teacher is already designated for the section
 components:
   securitySchemes:
     accessCookie:
@@ -534,8 +540,15 @@ components:
           format: uuid
         subject:
           type: string
+          maxLength: 80
+        isClassTeacher:
+          type: boolean
+          description: >
+            Designates this section assignment as the class teacher. Requires
+            sectionId; only one active designation is allowed per section.
     TeacherAssignment:
       type: object
+      required: [id, schoolId, staffId, classId, sectionId, subject, isClassTeacher, isActive]
       properties:
         id:
           type: string
@@ -554,6 +567,8 @@ components:
           format: uuid
         subject:
           type: [string, "null"]
+        isClassTeacher:
+          type: boolean
         isActive:
           type: boolean
     Error:

@@ -358,6 +358,44 @@ describe("TeacherWorkspaceService", () => {
     expect(tx.studentEnrolment.findMany).not.toHaveBeenCalled();
   });
 
+  it("allows attendance edits only for today in the active academic year", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-04-03T08:30:00.000Z"));
+    try {
+      const today = await service.getAttendance(schoolId, userId, {
+        academicYearId,
+        sectionId,
+        date: "2026-04-03",
+      });
+      const historical = await service.getAttendance(schoolId, userId, {
+        academicYearId,
+        sectionId,
+        date: "2026-04-02",
+      });
+      const future = await service.getAttendance(schoolId, userId, {
+        academicYearId,
+        sectionId,
+        date: "2026-04-04",
+      });
+
+      expect(today.canEdit).toBe(true);
+      expect(historical.canEdit).toBe(false);
+      expect(future.canEdit).toBe(false);
+
+      tx.academicYear.findFirst.mockResolvedValue({
+        ...academicYear,
+        status: "ARCHIVED",
+      });
+      const archivedYear = await service.getAttendance(schoolId, userId, {
+        academicYearId,
+        sectionId,
+        date: "2026-04-03",
+      });
+      expect(archivedYear.canEdit).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("requires a valid time and duration when creating a test", async () => {
     jest.useFakeTimers().setSystemTime(new Date("2026-04-03T08:30:00.000Z"));
     try {

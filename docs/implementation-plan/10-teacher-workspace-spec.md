@@ -103,6 +103,12 @@ class-teacher designation must be explicit and managed by the School Admin.
 
 ### Academic-year grade scales and class-teacher designation
 
+- New academic years are created as `DRAFT`. A School Admin can activate a
+  draft year only when the school-local date is within its inclusive date range
+  and no other academic year is active.
+- If another year is active, it must first be completed by a School Admin after
+  its end date in the school's timezone. A completed year is terminal and
+  read-only; it cannot be reactivated.
 - School Admins manage one grading scale per academic year. A scale consists
   of non-overlapping percentage bands with labels and must cover 0-100 before
   it is usable. If no scale exists, the Teacher UI says grades are not

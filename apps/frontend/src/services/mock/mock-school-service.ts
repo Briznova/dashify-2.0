@@ -1115,6 +1115,34 @@ export class MockSchoolService implements SchoolService {
     return year;
   }
 
+  async activateAcademicYear(id: string): Promise<AcademicYear> {
+    await delay();
+    const year = academicYears.find((item) => item.id === id);
+    if (!year) throw new Error("Academic year not found.");
+    if (year.status !== "DRAFT") throw new Error("Only draft years can be activated.");
+    if (academicYears.some((item) => item.status === "ACTIVE")) {
+      throw new Error("Complete the currently active academic year before activating another.");
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    if (today < year.startDate.slice(0, 10) || today > year.endDate.slice(0, 10)) {
+      throw new Error("An academic year can only be activated during its date range.");
+    }
+    year.status = "ACTIVE";
+    return year;
+  }
+
+  async completeAcademicYear(id: string): Promise<AcademicYear> {
+    await delay();
+    const year = academicYears.find((item) => item.id === id);
+    if (!year) throw new Error("Academic year not found.");
+    if (year.status !== "ACTIVE") throw new Error("Only active years can be completed.");
+    if (new Date().toISOString().slice(0, 10) <= year.endDate.slice(0, 10)) {
+      throw new Error("An academic year can only be completed after its end date.");
+    }
+    year.status = "COMPLETED";
+    return year;
+  }
+
   async getSchools(signal?: AbortSignal): Promise<School[]> {
     await delay(signal);
     return schools;

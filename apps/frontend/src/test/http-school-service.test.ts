@@ -1082,7 +1082,7 @@ describe("HttpSchoolService.getClassrooms", () => {
       endDate: "2028-03-31",
     };
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ id: "year-2", ...input, status: "PLANNED" }), {
+      new Response(JSON.stringify({ id: "year-2", ...input, status: "DRAFT" }), {
         status: 201,
         headers: { "Content-Type": "application/json" },
       }),
@@ -1094,6 +1094,45 @@ describe("HttpSchoolService.getClassrooms", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "https://dashify.test/api/v1/academic-years",
       expect.objectContaining({ method: "POST", body: JSON.stringify(input) }),
+    );
+  });
+
+  it("activates and completes an academic year through the lifecycle endpoints", async () => {
+    const activeYear = {
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "2026-2027",
+      startDate: "2026-04-01T00:00:00.000Z",
+      endDate: "2027-03-31T00:00:00.000Z",
+      status: "ACTIVE",
+    };
+    const completedYear = { ...activeYear, status: "COMPLETED" };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(activeYear), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(completedYear), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new HttpSchoolService(new ApiClient("https://dashify.test/api/v1"));
+
+    await expect(service.activateAcademicYear(activeYear.id)).resolves.toEqual(activeYear);
+    await expect(service.completeAcademicYear(activeYear.id)).resolves.toEqual(completedYear);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      `https://dashify.test/api/v1/academic-years/${activeYear.id}/activate`,
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      `https://dashify.test/api/v1/academic-years/${activeYear.id}/complete`,
+      expect.objectContaining({ method: "POST" }),
     );
   });
 

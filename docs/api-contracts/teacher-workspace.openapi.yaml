@@ -30,14 +30,15 @@ paths:
   /teacher/sections:
     get:
       operationId: listTeacherSections
-      summary: List active sections assigned to the authenticated teacher
+      summary: List active sections covered by the authenticated teacher's assignments
+      description: A class-level assignment covers the active sections within that class.
       x-required-permission: teacher.classes.read
       x-tenant-scope: authenticated active school
       parameters:
         - $ref: "#/components/parameters/AcademicYearIdQuery"
       responses:
         "200":
-          description: Active assigned sections
+          description: Active assigned sections and explicit class-teacher metadata
           content:
             application/json:
               schema:
@@ -50,6 +51,7 @@ paths:
     get:
       operationId: getTeacherAttendance
       summary: Read an assigned section's roster and attendance for a calendar date
+      description: Historical dates and academic years are read-only; canEdit is true only for the current school-local date in the active academic year when the session is editable by this Teacher.
       x-required-permission: teacher.attendance.read
       x-tenant-scope: authenticated active school and active teacher assignment
       parameters:
@@ -174,7 +176,7 @@ paths:
   /teacher/assessments/{id}/publish:
     post:
       operationId: publishTeacherAssessment
-      summary: Publish an assessment draft in an irreversible transition
+      summary: Publish an assignment, exam, or test draft in an irreversible transition
       x-required-permission: teacher.assessments.manage
       x-tenant-scope: authenticated active school and active teacher assignment
       parameters:
@@ -249,6 +251,16 @@ paths:
                   savedCount:
                     type: integer
                     minimum: 1
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /teacher/attendance/submit:
     post:
       operationId: submitTeacherAttendance
@@ -265,7 +277,7 @@ paths:
             schema:
               $ref: "#/components/schemas/SubmitTeacherAttendance"
       responses:
-        "200":
+        "201":
           description: Submitted attendance register
           content:
             application/json:
@@ -292,7 +304,7 @@ paths:
         - $ref: "#/components/parameters/OriginHeader"
         - $ref: "#/components/parameters/CsrfHeader"
       responses:
-        "200":
+        "201":
           description: Published results
           content:
             application/json:
@@ -451,6 +463,7 @@ components:
           description: Null means no session exists. The submitting Teacher can update their submitted register for the current school-local date.
         canEdit:
           type: boolean
+          description: True only for today's session in the active academic year when no session exists or the current Teacher owns an editable session.
         students:
           type: array
           items:
@@ -563,7 +576,7 @@ components:
         dueDate:
           type: string
           format: date
-          description: Must be within the selected academic year.
+          description: Must be within the selected active academic year and not before the current school-local date.
         maxScore:
           type: integer
           minimum: 1
@@ -582,11 +595,17 @@ components:
           description: Required only for TEST.
       allOf:
         - if:
+            required: [type]
             properties:
               type:
                 const: TEST
           then:
             required: [startTime, durationMinutes]
+          else:
+            not:
+              anyOf:
+                - required: [startTime]
+                - required: [durationMinutes]
     TeacherAssessment:
       type: object
       required:

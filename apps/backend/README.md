@@ -65,6 +65,12 @@ To revoke access, set `revoked_at` on that user's `platform_admin_grants` row;
 active platform requests then fail closed. Changing a seed password does not
 rotate an existing account's password.
 
+The migration history was consolidated into a single baseline for new, empty
+databases. It retains the original custom SQL constraints and permission setup.
+Databases that applied the previous migration history are not automatically
+upgraded by this baseline; do not reset or baseline a database with data unless
+its owner has approved a separately verified migration plan.
+
 These commands are not a production-readiness guarantee. Complete the RLS,
 least-privilege, isolation, credential lifecycle and operational release gates
 before onboarding real data.

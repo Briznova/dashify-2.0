@@ -1,1 +1,0 @@
-ALTER TYPE "PlatformPermission" ADD VALUE 'SETTINGS_READ';

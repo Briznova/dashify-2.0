@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useAcademicYearLifecycle,
   useAcademicYears,
   useAssignments,
   useCreateAcademicYear,
@@ -224,6 +225,7 @@ function ApiAcademicYears() {
   const resource = useAcademicYears();
   const { session } = useAuthSession();
   const { create, isPending, error } = useCreateAcademicYear();
+  const lifecycle = useAcademicYearLifecycle();
   const gradeScaleActions = useTeacherActions();
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -233,6 +235,9 @@ function ApiAcademicYears() {
     Record<string, TeacherGradeBand[]>
   >({});
   const canCreate = Boolean(session?.permissionKeys.includes("academic_structure.manage"));
+  const hasActiveYear = Boolean(
+    resource.data?.some((year) => year.status === "ACTIVE"),
+  );
   const activeScaleYearId =
     scaleYearId ||
     resource.data?.find((year) => year.status === "ACTIVE")?.id ||
@@ -294,20 +299,76 @@ function ApiAcademicYears() {
     if (saved) gradeScale.refresh();
   }
 
+  async function activateYear(year: AcademicYear) {
+    if (
+      lifecycle.pendingId ||
+      hasActiveYear ||
+      !window.confirm(
+        `Activate ${year.name}? It can only be active during its date range.`,
+      )
+    ) {
+      return;
+    }
+    if (await lifecycle.activate(year.id)) resource.refresh();
+  }
+
+  async function completeYear(year: AcademicYear) {
+    if (
+      lifecycle.pendingId ||
+      !window.confirm(
+        `Complete ${year.name}? Teacher workflows for this year will become read-only. You can only complete it after its end date.`,
+      )
+    ) {
+      return;
+    }
+    if (await lifecycle.complete(year.id)) resource.refresh();
+  }
+
   const columns: DataTableColumn<AcademicYear>[] = [
     { heading: "ACADEMIC YEAR", render: (row) => <strong>{row.name}</strong> },
     { heading: "START DATE", render: (row) => row.startDate.slice(0, 10) },
     { heading: "END DATE", render: (row) => row.endDate.slice(0, 10) },
     { heading: "STATUS", render: (row) => <StatusBadge>{row.status}</StatusBadge> },
+    {
+      heading: "ACTIONS",
+      render: (row) => {
+        if (!canCreate) return null;
+        if (row.status === "DRAFT" && !hasActiveYear) {
+          return (
+            <button
+              className={styles.yearActionButton}
+              type="button"
+              disabled={lifecycle.pendingId !== null}
+              onClick={() => void activateYear(row)}
+            >
+              {lifecycle.pendingId === row.id ? "Activating..." : "Activate"}
+            </button>
+          );
+        }
+        if (row.status === "ACTIVE") {
+          return (
+            <button
+              className={styles.yearActionButton}
+              type="button"
+              disabled={lifecycle.pendingId !== null}
+              onClick={() => void completeYear(row)}
+            >
+              {lifecycle.pendingId === row.id ? "Completing..." : "Complete"}
+            </button>
+          );
+        }
+        return null;
+      },
+    },
   ];
 
   return (
     <>
-      <PageHeading eyebrow="SCHOOL ACADEMICS" title="Academic years" description="Review school years and add future academic periods." />
+      <PageHeading eyebrow="SCHOOL ACADEMICS" title="Academic years" description="Create draft years, activate them within their dates, and complete active years after they end." />
       {canCreate && (
-        <Panel title="Create academic year" description="The year name and calendar dates must be unique and valid for this school.">
+        <Panel title="Create academic year" description="New years start as drafts. Date ranges must be valid and cannot overlap another draft or active year.">
           <form className={styles.createYearForm} onSubmit={handleSubmit}>
-            <label>Year name<input value={name} onChange={(event) => setName(event.target.value)} required maxLength={100} /></label>
+            <label>Year name<input value={name} onChange={(event) => setName(event.target.value)} required maxLength={80} /></label>
             <label>Start date<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required /></label>
             <label>End date<input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} min={startDate || undefined} required /></label>
             <button type="submit" disabled={isPending}>{isPending ? "Creating..." : "Create year"}</button>
@@ -316,6 +377,17 @@ function ApiAcademicYears() {
         </Panel>
       )}
       {!canCreate && <p className={styles.portalHint}>You have read-only access to academic years.</p>}
+      {lifecycle.error && (
+        <p className={styles.gradeScaleError} role="alert">
+          {lifecycle.error}
+        </p>
+      )}
+      {hasActiveYear && resource.data?.some((year) => year.status === "DRAFT") && (
+        <p className={styles.lifecycleHint}>
+          Complete the active academic year after its end date before activating
+          another year.
+        </p>
+      )}
       <Panel
         title="Grading scale"
         description="Configure percentage bands for an academic year. Bands must cover 0-100 without gaps or overlaps."

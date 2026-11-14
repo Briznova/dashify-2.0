@@ -72,6 +72,14 @@ NEXT_PUBLIC_DASHIFY_API_BASE_URL=http://localhost:3001
 
 Set these variables in `.env.local`; the API base URL is the backend origin and the client appends `/api/v1`. API mode uses HttpOnly access/refresh cookies and the CSRF double-submit header. Public sign-up and password reset are intentionally unavailable in API mode until their contracts are approved and implemented.
 
+For a same-origin deployment, set `NEXT_PUBLIC_DASHIFY_API_BASE_URL=/api/v1`
+and set `BACKEND_INTERNAL_URL` to the backend's HTTP(S) origin in the frontend
+build environment. Next.js proxies `/api/v1/*` to that origin. The value must
+not include credentials, a path, query, or fragment; changing it requires a
+frontend rebuild. If it is unset, no rewrite is added and the existing direct
+API configuration continues to work. See the [staging playbook](../../docs/implementation-plan/12-railway-staging-playbook.md)
+for Railway private networking and browser authentication checks.
+
 The auth adapter uses:
 
 - `POST /auth/login`

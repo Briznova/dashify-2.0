@@ -1,0 +1,111 @@
+openapi: 3.1.0
+info:
+  title: Dashify Notifications API
+  version: 1.0.0
+  description: Authenticated-user notifications scoped to the active school.
+servers:
+  - url: /api/v1
+security:
+  - accessCookie: []
+paths:
+  /notifications:
+    get:
+      operationId: listNotifications
+      summary: List the authenticated user's notifications for the active school
+      description: Returns at most the 50 newest notifications; unreadCount includes all unread notifications for this user in the active school.
+      x-tenant-scope: authenticated active school and authenticated user
+      responses:
+        "200":
+          description: Notifications and unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [notifications, unreadCount]
+                properties:
+                  notifications:
+                    type: array
+                    maxItems: 50
+                    items:
+                      $ref: "#/components/schemas/Notification"
+                  unreadCount:
+                    type: integer
+                    minimum: 0
+        "400": { description: An active school must be selected }
+        "401": { description: Authentication required }
+  /notifications/read-all:
+    patch:
+      operationId: markAllNotificationsRead
+      summary: Mark all of the authenticated user's active-school notifications read
+      x-tenant-scope: authenticated active school and authenticated user
+      parameters:
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Number of unread notifications marked read
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, updatedCount]
+                properties:
+                  success: { type: boolean, const: true }
+                  updatedCount: { type: integer, minimum: 0 }
+        "400": { description: An active school must be selected }
+        "401": { description: Authentication required }
+  /notifications/{id}/read:
+    patch:
+      operationId: markNotificationRead
+      summary: Mark one of the authenticated user's active-school notifications read
+      x-tenant-scope: authenticated active school and authenticated user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/OriginHeader"
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Notification marked read; already-read notifications also succeed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success: { type: boolean, const: true }
+        "400": { description: An active school must be selected }
+        "401": { description: Authentication required }
+        "404": { description: Notification not found for the authenticated user in the active school }
+components:
+  securitySchemes:
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: dashify_access
+  parameters:
+    OriginHeader:
+      name: Origin
+      in: header
+      required: true
+      schema: { type: string }
+    CsrfHeader:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: { type: string }
+  schemas:
+    Notification:
+      type: object
+      required: [id, type, title, body, readAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [GENERAL, ATTENDANCE, FEE, ANNOUNCEMENT, SYSTEM]
+        title: { type: string }
+        body: { type: string }
+        readAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }

@@ -14,6 +14,18 @@ import { CreateTeacherAccountDto } from "./dto/create-teacher-account.dto";
 import { CreateDepartmentDto, UpdateDepartmentDto } from "./dto/department.dto";
 import { UpdateStaffDto } from "./dto/update-staff.dto";
 
+const teacherPermissionKeys = [
+  "dashboard.teacher.read",
+  "announcements.read",
+  "teacher.classes.read",
+  "teacher.attendance.read",
+  "teacher.attendance.mark",
+  "teacher.assessments.read",
+  "teacher.assessments.manage",
+  "teacher.results.read",
+  "teacher.results.write",
+] as const;
+
 @Injectable()
 export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
@@ -97,36 +109,7 @@ export class StaffService {
           });
           if (!department) throw new NotFoundException("Active department not found");
         }
-        const permissions = [
-          "dashboard.teacher.read",
-          "announcements.read",
-          "teacher.classes.read",
-          "teacher.attendance.read",
-          "teacher.attendance.mark",
-          "teacher.assessments.read",
-          "teacher.assessments.manage",
-          "teacher.results.read",
-          "teacher.results.write",
-        ];
-        let role = await tx.role.findUnique({
-          where: { schoolId_key: { schoolId, key: "TEACHER" } },
-          include: { permissions: { include: { permission: { select: { key: true } } } } },
-        });
-        if (role) {
-          const keys = new Set(role.permissions.map(({ permission }) => permission.key));
-          if (!role.isSystem || keys.size !== permissions.length || !permissions.every((key) => keys.has(key))) {
-            throw new ConflictException("The school's Teacher role differs from the standard role");
-          }
-        } else {
-          role = await tx.role.create({
-            data: { schoolId, key: "TEACHER", name: "Teacher", isSystem: true },
-            include: { permissions: { include: { permission: { select: { key: true } } } } },
-          });
-          for (const key of permissions) {
-            const permission = await tx.permission.upsert({ where: { key }, create: { key }, update: {} });
-            await tx.rolePermission.create({ data: { roleId: role.id, permissionId: permission.id } });
-          }
-        }
+        const role = await this.ensureTeacherRole(tx, schoolId);
         const user = await tx.user.create({
           data: { email: dto.email, passwordHash, firstName: dto.firstName, lastName: dto.lastName, phone: dto.phone },
           select: { id: true, email: true, firstName: true, lastName: true },
@@ -264,6 +247,7 @@ export class StaffService {
           );
         }
         if (user) {
+          await this.lockSchool(tx, schoolId);
           const platformGrant = await tx.platformAdminGrant.findFirst({
             where: { userId: user.id, revokedAt: null },
             select: { id: true },
@@ -503,12 +487,7 @@ export class StaffService {
     schoolId: string,
     userId: string,
   ) {
-    const role = await this.teacherRole(tx, schoolId);
-    if (!role) {
-      throw new InternalServerErrorException(
-        "Teacher role is not configured for this school",
-      );
-    }
+    const role = await this.ensureTeacherRole(tx, schoolId);
 
     let membership = await tx.schoolMembership.findUnique({
       where: { schoolId_userId: { schoolId, userId } },
@@ -545,6 +524,59 @@ export class StaffService {
     return tx.role.findFirst({
       where: { schoolId, key: "TEACHER" },
     });
+  }
+
+  private async ensureTeacherRole(
+    tx: Prisma.TransactionClient,
+    schoolId: string,
+  ) {
+    let role = await tx.role.findUnique({
+      where: { schoolId_key: { schoolId, key: "TEACHER" } },
+      include: {
+        permissions: { include: { permission: { select: { key: true } } } },
+      },
+    });
+    if (role) {
+      const keys = new Set(
+        role.permissions.map(({ permission }) => permission.key),
+      );
+      const standardKeys = new Set<string>(teacherPermissionKeys);
+      if (!role.isSystem || [...keys].some((key) => !standardKeys.has(key))) {
+        throw new ConflictException(
+          "The school's Teacher role differs from the standard role",
+        );
+      }
+      for (const key of teacherPermissionKeys) {
+        if (keys.has(key)) continue;
+        const permission = await tx.permission.upsert({
+          where: { key },
+          create: { key },
+          update: {},
+        });
+        await tx.rolePermission.create({
+          data: { roleId: role.id, permissionId: permission.id },
+        });
+      }
+      return role;
+    }
+
+    role = await tx.role.create({
+      data: { schoolId, key: "TEACHER", name: "Teacher", isSystem: true },
+      include: {
+        permissions: { include: { permission: { select: { key: true } } } },
+      },
+    });
+    for (const key of teacherPermissionKeys) {
+      const permission = await tx.permission.upsert({
+        where: { key },
+        create: { key },
+        update: {},
+      });
+      await tx.rolePermission.create({
+        data: { roleId: role.id, permissionId: permission.id },
+      });
+    }
+    return role;
   }
 
   async listAssignments(schoolId: string) {

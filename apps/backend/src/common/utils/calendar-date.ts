@@ -15,3 +15,22 @@ export function parseCalendarDate(value: string): Date {
   }
   return date;
 }
+
+export function schoolLocalDate(now: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+  const year = values.year;
+  const month = values.month;
+  const day = values.day;
+  if (!year || !month || !day) {
+    throw new Error("Could not derive the school-local calendar date");
+  }
+  return `${year}-${month}-${day}`;
+}

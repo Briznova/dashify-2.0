@@ -1,12 +1,162 @@
 openapi: 3.1.0
 info:
-  title: Dashify Academic Structure API - class creation and editing
+  title: Dashify Academic Structure API
   version: 1.0.0
+  description: School-scoped academic years, grade scales, classes, and sections.
 servers:
   - url: /api/v1
 security:
   - accessCookie: []
 paths:
+  /academic-years:
+    get:
+      operationId: listAcademicYears
+      summary: List academic years in the active school
+      x-required-permission: academic_structure.read
+      x-tenant-scope: authenticated active school
+      responses:
+        "200":
+          description: Academic years ordered by start date, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AcademicYear"
+        "401": { description: Authentication required }
+        "403": { description: Missing permission or invalid active-school context }
+    post:
+      operationId: createAcademicYear
+      summary: Create a draft academic year
+      description: New academic years always start in DRAFT status.
+      x-required-permission: academic_structure.manage
+      x-tenant-scope: authenticated active school
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+        - $ref: "#/components/parameters/Csrf"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAcademicYear"
+      responses:
+        "201":
+          description: Created draft academic year
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicYear"
+        "400": { description: Invalid name or date range }
+        "401": { description: Authentication required }
+        "403": { description: Missing permission or invalid active-school context }
+        "409": { description: Date range overlaps another draft or active year }
+  /academic-years/{id}/activate:
+    post:
+      operationId: activateAcademicYear
+      summary: Activate a draft academic year
+      description: >
+        Activation is allowed only when the school-local date is within the
+        inclusive start/end dates and no other academic year is ACTIVE. Complete
+        the current active year after its end date before activating another.
+      x-required-permission: academic_structure.manage
+      x-tenant-scope: authenticated active school
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/Origin"
+        - $ref: "#/components/parameters/Csrf"
+      responses:
+        "201":
+          description: Activated academic year
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicYear"
+        "401": { description: Authentication required }
+        "403": { description: Missing permission or invalid active-school context }
+        "404": { description: Academic year not found in the active school }
+        "409": { description: Invalid transition, date outside the year, or another year is active }
+  /academic-years/{id}/complete:
+    post:
+      operationId: completeAcademicYear
+      summary: Complete an active academic year
+      description: >
+        An active year can be completed only after its end date in the school's
+        timezone. COMPLETED is a terminal, read-only status.
+      x-required-permission: academic_structure.manage
+      x-tenant-scope: authenticated active school
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/Origin"
+        - $ref: "#/components/parameters/Csrf"
+      responses:
+        "201":
+          description: Completed academic year
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicYear"
+        "401": { description: Authentication required }
+        "403": { description: Missing permission or invalid active-school context }
+        "404": { description: Academic year not found in the active school }
+        "409": { description: Year is not active or its end date has not passed }
+  /academic-years/{id}/grade-scale:
+    get:
+      operationId: getAcademicYearGradeScale
+      summary: Read the grading scale configured for an academic year
+      x-required-permission: academic_structure.read
+      x-tenant-scope: authenticated active school
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The academic year and its configured grade bands, or an empty band list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GradeScale"
+        "401": { description: Authentication required }
+        "403": { description: Missing permission or invalid active-school context }
+        "404": { description: Academic year not found in the active school }
+    put:
+      operationId: saveAcademicYearGradeScale
+      summary: Create or replace an academic year's complete grading scale
+      description: Bands must have unique labels and cover 0-100 without gaps or overlaps.
+      x-required-permission: academic_structure.manage
+      x-tenant-scope: authenticated active school
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/Origin"
+        - $ref: "#/components/parameters/Csrf"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveGradeScale"
+      responses:
+        "200":
+          description: Saved academic-year grade scale
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GradeScale"
+        "400": { description: Invalid or incomplete grade bands }
+        "401": { description: Authentication required }
+        "403": { description: Missing permission or invalid active-school context }
+        "404": { description: Academic year not found in the active school }
   /classes/with-section:
     post:
       operationId: createClassWithSection
@@ -150,6 +300,63 @@ components:
       in: cookie
       name: dashify_access
   schemas:
+    CreateAcademicYear:
+      type: object
+      additionalProperties: false
+      required: [name, startDate, endDate]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+    AcademicYear:
+      type: object
+      required: [id, schoolId, name, startDate, endDate, status]
+      properties:
+        id: { type: string, format: uuid }
+        schoolId: { type: string, format: uuid }
+        name: { type: string, maxLength: 80 }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE, COMPLETED]
+    SaveGradeScale:
+      type: object
+      additionalProperties: false
+      required: [bands]
+      properties:
+        bands:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [label, minPercent, maxPercent]
+            properties:
+              label: { type: string, minLength: 1, maxLength: 20 }
+              minPercent: { type: integer, minimum: 0, maximum: 100 }
+              maxPercent: { type: integer, minimum: 0, maximum: 100 }
+    GradeScale:
+      type: object
+      required: [academicYearId, academicYearName, bands]
+      properties:
+        academicYearId: { type: string, format: uuid }
+        academicYearName: { type: string }
+        bands:
+          type: array
+          items:
+            $ref: "#/components/schemas/GradeBand"
+    GradeBand:
+      type: object
+      required: [id, scaleId, label, minPercent, maxPercent, sortOrder]
+      properties:
+        id: { type: string, format: uuid }
+        scaleId: { type: string, format: uuid }
+        label: { type: string, maxLength: 20 }
+        minPercent: { type: integer, minimum: 0, maximum: 100 }
+        maxPercent: { type: integer, minimum: 0, maximum: 100 }
+        sortOrder: { type: integer }
     ClassWithSection:
       allOf:
         - $ref: "#/components/schemas/Class"

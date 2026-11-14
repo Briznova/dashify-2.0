@@ -328,7 +328,7 @@ export type AcademicYear = {
   name: string;
   startDate: string;
   endDate: string;
-  status: string;
+  status: "DRAFT" | "ACTIVE" | "COMPLETED";
 };
 
 export type CreateAcademicYearInput = Pick<AcademicYear, "name" | "startDate" | "endDate">;
