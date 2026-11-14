@@ -442,14 +442,12 @@ unimplemented operations available.
 - This operation sends no invitation, creates no administrator, and does not
   assert that onboarding is complete. The school remains subject to existing
   `isActive` defaults; that field is not an onboarding indicator.
-- The operator can opt in to create permission through the backend seed using
-  `SEED_PLATFORM_ADMIN_GRANT_SCHOOLS_CREATE=true` with the existing platform
-  seed identity and password variables, as well as the seed's required
-  `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`. The seed checks the active dedicated
-  grant, audits new or reactivated permission grants, and is idempotent.
+- The original local seed used an explicit opt-in flag and demo identity for
+  this permission. The current bootstrap instead creates one dedicated platform
+  administrator with all six implemented explicit platform grants, without demo
+  data. It does not elevate an existing identity or restore a revoked grant.
   Revocation requires an authorized database operator; there is no platform
-  user-management UI. Seeding also performs other configured seed operations,
-  so it must only be run intentionally in the appropriate environment.
+  user-management UI.
 - The creation form and navigation are API-mode and permission gated; backend
   checks remain authoritative. The form redirects to detail, which shows a
   recorded state without inferring onboarding state from `isActive`.
@@ -480,9 +478,9 @@ unimplemented operations available.
   time/ID ordering and optional action and inclusive UTC date filters. Only
   currently recorded successful platform events are shown. Filtering by
   failure is unavailable because failure events are not collected here.
-- `SEED_PLATFORM_ADMIN_GRANT_AUDIT_READ=true` explicitly opts in to the audit
-  permission using the existing seed identity requirements. Existing grants
-  do not automatically receive it. The seed records grant or reactivation.
+- Audit read is included when the current seed creates a new platform
+  administrator. Existing grants are not automatically extended or restored.
+  New grants are audited.
 - The frontend shows the real audit page only in API mode with that permission;
   otherwise it denies access or, in mock mode, displays a marked preview. The
   overview uses the same permission to show up to three recent platform events.
@@ -505,8 +503,8 @@ unimplemented operations available.
   existing tokens retain their issuance-time expiry. The UI is read-only and
   does not claim that MFA, lockout, maintenance, retention or billing settings
   are implemented.
-- `SEED_PLATFORM_ADMIN_GRANT_SETTINGS_READ=true` explicitly opts in using the
-  existing seed identity requirements. No existing grant is silently extended.
+- Settings read is included when the current seed creates a new platform
+  administrator. No existing grant is silently extended.
   Settings are changed only through the existing deployment configuration and
   restart process; no settings-write permission or endpoint is introduced.
 - The additive settings migration was applied to the configured local database

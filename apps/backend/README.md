@@ -13,7 +13,7 @@ NestJS + TypeScript + PostgreSQL + Prisma modular-monolith foundation for the DA
 - Academic years, classes and sections
 - Student create/list/read/archive with guardian and enrolment creation in a transaction
 - Attendance session create, bulk mark and close
-- Health/readiness endpoints, Docker Compose, synthetic seed, CI baseline
+- Health/readiness endpoints, Docker Compose, platform administrator bootstrap, CI baseline
 
 ## Not yet implemented
 
@@ -35,7 +35,8 @@ cp .env.example .env
 docker compose up -d postgres
 npm install
 npx prisma generate
-npx prisma migrate dev --name init  # generates the initial SQL migration from schema.prisma
+npm run prisma:deploy
+# Set SEED_PLATFORM_ADMIN_EMAIL and SEED_PLATFORM_ADMIN_PASSWORD in the environment.
 npm run prisma:seed
 npm run start:dev
 ```
@@ -47,9 +48,26 @@ Readiness: `http://localhost:3001/api/v1/health/ready`
 
 Browser authentication uses `dashify_access`, `dashify_refresh`, and `dashify_csrf` cookies. The frontend origin allow-list is configured with `WEB_APP_ORIGIN`; cookie-authenticated state-changing requests must include the CSRF header.
 
-The seed requires `SEED_ADMIN_EMAIL` and a locally configured `SEED_ADMIN_PASSWORD` of at least 12 characters. Choose credentials for a disposable local database; do not reuse them outside development.
+The seed requires a valid `SEED_PLATFORM_ADMIN_EMAIL` and
+`SEED_PLATFORM_ADMIN_PASSWORD` of at least 12 characters. It creates one
+dedicated platform Super Admin and grants school creation, School Admin creation,
+audit read, settings read, and support read/update permissions. School directory
+read is implicit. It creates no school, school membership, demo account, or
+teacher. Keep credentials in deployment-managed secrets, not source control.
 
-To bootstrap a separate platform-only Super Admin in a local database, optionally set `SEED_PLATFORM_ADMIN_EMAIL` and `SEED_PLATFORM_ADMIN_PASSWORD` (minimum 12 characters) before running the seed. The account must not have an active school membership. This grant provides read-only school directory access; it does not enable school switching, school data access, or school lifecycle changes. Do not commit credentials. To revoke access, set `revoked_at` on that user's `platform_admin_grants` row; active platform requests then fail closed.
+Run `npm run prisma:deploy` before `npm run prisma:seed`. Both `DATABASE_URL`
+and `DIRECT_URL` must point to the intended database; the runtime database role
+must have the privileges needed to seed. The seed is a no-op for a matching
+active platform administrator with the same password and all bootstrap grants.
+It refuses to elevate an existing account, change a password, or restore a
+missing or revoked grant. It does not remove any pre-existing users or schools.
+To revoke access, set `revoked_at` on that user's `platform_admin_grants` row;
+active platform requests then fail closed. Changing a seed password does not
+rotate an existing account's password.
+
+These commands are not a production-readiness guarantee. Complete the RLS,
+least-privilege, isolation, credential lifecycle and operational release gates
+before onboarding real data.
 
 School Admin account creation requires the separate `platform.school-admins.create`
 grant and a server-side `SCHOOL_ADMIN_DEFAULT_PASSWORD` of at least 12
